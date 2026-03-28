@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en" data-aceradio-lang-mode="browser">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AceRadio Listen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#08111b;--panel:#101a27;--panel-2:#0c1520;--line:rgba(112,173,255,.16);--text:#eef7ff;--muted:#94a8bd;--soft:#6e8196;--accent:#16e0ba;--accent-2:#58a6ff;--theme:#35c6ff;--genre:#b18cff;--live:#12391f}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at top,#0b1a2a 0,#08111b 40%,#06101a 100%);color:var(--text)}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 18px 40px}
+.topbar{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.brand{display:flex;flex-direction:column;gap:4px}
+.brand h1{margin:0;font-size:1.25rem;font-weight:800;letter-spacing:-.02em}
+.brand p{margin:0;color:var(--muted);font-size:.92rem}
+.badges{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pill{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-weight:800;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pill.live{background:var(--live);color:#98f7ba;border-color:rgba(152,247,186,.24)}.lang-select{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--text);font:inherit;font-weight:700}
+.grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,.95fr);gap:18px}
+.card{background:linear-gradient(180deg,rgba(16,26,39,.96),rgba(12,21,32,.98));border:1px solid var(--line);border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,.28)}
+.hero{padding:22px}
+.now-label{font-size:.72rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);margin-bottom:8px}
+.title{font-size:1.4rem;font-weight:900;line-height:1.04;letter-spacing:-.04em;margin:0 0 8px;color:#CCA600}
+.desc{color:#eaf4ff;font-size:.95rem;line-height:1.55;max-height:calc(.95rem * 1.55 * 4);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.meta-row,.spec-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:.8rem;font-weight:700;color:var(--text)}
+.chip.genre{border-color:rgba(177,140,255,.28);background:rgba(177,140,255,.1);color:#d8c8ff}
+.chip.theme{border-color:rgba(53,198,255,.28);background:rgba(53,198,255,.1);color:#c9f3ff}
+.chip.source{border-color:rgba(22,224,186,.28);background:rgba(22,224,186,.1);color:#c8fff5}
+.chip.vote{border-color:rgba(255,107,149,.28);background:rgba(255,107,149,.1);color:#ffbfd2}
+audio{width:100%;margin-top:18px}
+.meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px;align-items:stretch}
+.meta-box{padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
+.meta-box .k{font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);margin-bottom:6px}
+.meta-box .v{font-size:.96rem;font-weight:700;line-height:1.42}
+.lyrics{margin-top:18px;padding:16px 18px;border-radius:18px;background:#0b1520;border:1px solid rgba(255,255,255,.06);white-space:pre-wrap;line-height:1.6;font-size:.95rem;min-height:260px;max-height:420px;overflow:auto}
+.side{display:flex;flex-direction:column;gap:18px}
+.side .card{padding:18px}
+.sec-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}
+.sec-head h2{margin:0;font-size:.92rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#b7d9ff}
+.sec-head span{font-size:.74rem;color:var(--soft)}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
+.item-title{font-size:1rem;font-weight:800;line-height:1.2;margin:0 0 6px;color:#CCA600}
+.item-meta,.item-line{font-size:.82rem;line-height:1.45;color:var(--muted)}
+.item-genre-theme{font-size:.82rem;line-height:1.45;color:#b9d7ff;margin-top:4px}
+.item-caption{font-size:.82rem;line-height:1.45;color:#eef4ff;margin-top:4px}
+.empty{padding:14px;border-radius:16px;background:rgba(255,255,255,.02);border:1px dashed rgba(255,255,255,.07);color:var(--soft);font-size:.9rem}
+.footer{margin-top:16px;color:var(--soft);font-size:.84rem}
+#captionBox{grid-column:1 / -1}#captionValue{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}@media (max-width:920px){.grid{grid-template-columns:1fr}.title{font-size:1.2rem}.meta-grid{grid-template-columns:1fr}#captionBox{grid-column:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <h1>AceRadio · Listen</h1>
+      <p>Now playing, queue and recent tracks with genre first and lyrical theme right after.</p>
+    </div>
+    <div class="badges">
+      <select id="uiLangListen" class="lang-select" data-lang-select><option value="auto">AUTO</option><option value="en">EN</option><option value="it">IT</option></select>
+      <div id="listenerCount" class="pill">0 listening</div>
+      <div id="state" class="pill">Offline</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card hero">
+      <div class="now-label">Now Playing</div>
+      <h2 id="nowTitle" class="title">Waiting for broadcast...</h2>
+      <div id="nowDesc" class="desc">The station will appear here when AceRadio is running.</div>
+      <div id="nowMeta" class="meta-row"></div>
+      <div id="nowSpecs" class="spec-row"></div>
+      <audio id="player" controls preload="none"></audio>
+      <div class="meta-grid">
+        <div class="meta-box"><div class="k">Genre</div><div id="genreValue" class="v">—</div></div>
+        <div class="meta-box"><div class="k">Theme</div><div id="themeValue" class="v">—</div></div>
+        <div class="meta-box" id="captionBox"><div class="k">Caption</div><div id="captionValue" class="v">&nbsp;</div></div>
+        <div class="meta-box"><div class="k">Duration</div><div id="durationValue" class="v">—</div></div>
+      </div>
+      <div id="lyrics" class="lyrics">No lyrics yet.</div>
+      <div class="footer">Share this page with friends: <code>/listen</code></div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <div class="sec-head"><h2>Up Next</h2><span id="queueCount">0 tracks ready</span></div>
+        <div id="queueList" class="list"><div class="empty">Nothing queued yet.</div></div>
+      </div>
+      <div class="card">
+        <div class="sec-head"><h2>Recent</h2><span>Last played</span></div>
+        <div id="recentList" class="list"><div class="empty">No recent tracks yet.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/static/i18n.js"></script>
+<script>
+const player=document.getElementById('player');
+const state=document.getElementById('state');
+const listenerCount=document.getElementById('listenerCount');
+const nowTitle=document.getElementById('nowTitle');
+const nowDesc=document.getElementById('nowDesc');
+const nowMeta=document.getElementById('nowMeta');
+const nowSpecs=document.getElementById('nowSpecs');
+const genreValue=document.getElementById('genreValue');
+const themeValue=document.getElementById('themeValue');
+const captionValue=document.getElementById('captionValue');
+const durationValue=document.getElementById('durationValue');
+const lyrics=document.getElementById('lyrics');
+const queueList=document.getElementById('queueList');
+const queueCount=document.getElementById('queueCount');
+const recentList=document.getElementById('recentList');
+let currentTrackId='';
+
+function chip(text, cls=''){
+  const safe=String(text||'').trim();
+  return safe?`<span class="chip ${cls}">${safe}</span>`:'';
+}
+function fmtTime(seconds){
+  const total=Math.max(0,Math.round(Number(seconds||0)));
+  const m=Math.floor(total/60);
+  const s=String(total%60).padStart(2,'0');
+  return `${m}:${s}`;
+}
+function genreThemeText(track){
+  const genre=String(track?.genre||track?.prompt?.genre||track?.prompt?.style||'').trim();
+  const theme=String(track?.theme||track?.prompt?.theme||'').trim();
+  if(genre&&theme) return `Genre: ${genre} · Theme: ${theme}`;
+  if(genre) return `Genre: ${genre}`;
+  if(theme) return `Theme: ${theme}`;
+  return '';
+}
+function cleanTrackCaption(text, track){
+  let value=String(text||'').replace(/\s+/g,' ').trim().replace(/^[,;|\-\s]+|[,;|\-\s]+$/g,'');
+  if(!value) return '';
+  const title=String(track?.song_title||track?.prompt?.song_title||'').trim().toLowerCase();
+  const genre=String(track?.genre||track?.prompt?.genre||track?.prompt?.style||'').trim().toLowerCase();
+  const parts=value.split('|').map(x=>x.trim()).filter(Boolean);
+  if(parts.length){
+    if(title && parts[0]?.toLowerCase()===title) parts.shift();
+    if(genre && parts[0]?.toLowerCase()===genre) parts.shift();
+    value=parts.join(' | ').trim() || value;
+  }
+  if(value.toLowerCase()===genreThemeText(track).toLowerCase()) return '';
+  return value;
+}
+function buildPromptCaption(track){
+  const prompt=track?.prompt||{};
+  const pieces=[prompt.instruments,prompt.mood,prompt.vocal_style,prompt.production]
+    .map(x=>String(x||'').replace(/\s+/g,' ').trim())
+    .filter(Boolean);
+  const out=[];
+  const seen=new Set();
+  for(const piece of pieces){
+    const lower=piece.toLowerCase();
+    if(seen.has(lower)) continue;
+    seen.add(lower);
+    out.push(piece);
+  }
+  return out.join(', ');
+}
+function getTrackCaption(track){
+  return cleanTrackCaption(track?.caption || track?.prompt?.caption || buildPromptCaption(track) || '', track);
+}
+function getDisplayedLyrics(track){
+  if(track?.instrumental) return 'Instrumental — no lyrics';
+  return String(track?.lyrics||'').trim()||'No lyrics yet.';
+}
+function makePlaybackSyncPoint(elapsed=0,receivedAt=null){
+  return {elapsed:Math.max(0,Number(elapsed||0)),receivedAt:Number.isFinite(receivedAt)?Number(receivedAt):performance.now()};
+}
+function resolvePlaybackSyncPoint(syncPoint){
+  if(syncPoint&&typeof syncPoint==='object'){
+    const base=Math.max(0,Number(syncPoint.elapsed||0));
+    const receivedAt=Number.isFinite(syncPoint.receivedAt)?Number(syncPoint.receivedAt):performance.now();
+    return Math.max(0,base+Math.max(0,(performance.now()-receivedAt)/1000));
+  }
+  return Math.max(0,Number(syncPoint||0));
+}
+function applyPlayerSyncPoint(syncPoint){
+  const seekTo=resolvePlaybackSyncPoint(syncPoint);
+  if(!(seekTo>0)) return 0;
+  try{ player.currentTime=Math.min(seekTo,Math.max(0,(player.duration||seekTo)-.5)); }catch(_){ }
+  return seekTo;
+}
+async function ensureListenPlayback(el, attempts=4, delayMs=180){
+  let lastError=null;
+  if(!el || !el.getAttribute('src')) return false;
+  for(let i=0;i<attempts;i++){
+    try{
+      const maybePromise=el.play();
+      if(maybePromise && typeof maybePromise.then==='function') await maybePromise;
+      if(!el.paused) return true;
+    }catch(err){
+      lastError=err;
+    }
+    await new Promise(resolve=>setTimeout(resolve, delayMs));
+  }
+  if(lastError) throw lastError;
+  return !el.paused;
+}
+function setTrack(track){
+  if(!track){
+    document.title='AceRadio Listen';
+    nowTitle.textContent='Waiting for broadcast...';
+    nowDesc.textContent='The station will appear here when AceRadio is running.';
+    nowMeta.innerHTML='';
+    nowSpecs.innerHTML='';
+    genreValue.textContent='—';
+    themeValue.textContent='—';
+    captionValue.innerHTML='&nbsp;';
+    durationValue.textContent='—';
+    lyrics.textContent='No lyrics yet.';
+    return;
+  }
+  document.title=`${track.song_title||'AceRadio'} · Listen`;
+  nowTitle.textContent=track.song_title||'Untitled';
+  const captionText=getTrackCaption(track);
+  nowDesc.textContent=captionText||' ';
+  let sourceKey=((track.display_source||track.prompt?.display_source||track.prompt?.source||track.source||'ai_generated')+'').toLowerCase();
+  if(track.instrumental&&['file','both','library','ai_catalog','mixed'].includes(sourceKey)) sourceKey='ai_generated';
+  if(sourceKey==='file') sourceKey='library';
+  if(sourceKey==='both') sourceKey='mixed';
+  if(sourceKey==='ollama') sourceKey='ai_generated';
+  if(sourceKey==='cache') sourceKey='cached';
+  const sourceMap={library:'Library',ai_catalog:'AI catalog',ai_generated:'AI generated',mixed:'Mixed',cached:'Cached'};
+  const sourceLabel=(track.display_source_label||sourceMap[sourceKey]||'AI generated')+'';
+  nowMeta.innerHTML=[
+    chip((track.language||'?').toUpperCase()),
+    chip((track.bpm||'—')+' BPM'),
+    chip(track.key_scale||'—'),
+    chip(track.instrumental?'Instrumental':'Vocal'),
+    chip(sourceLabel,'source'),
+    genreThemeText(track)?chip(genreThemeText(track), (track.genre||track.prompt?.genre)&&track.theme?'theme':((track.genre||track.prompt?.genre)?'genre':'theme')):''
+  ].join('');
+  nowSpecs.innerHTML=[
+    track.audio_format?chip(String(track.audio_format).toUpperCase()):'',
+    track.duration?chip(fmtTime(track.duration)):'',
+    track.vote_count!=null?chip('❤ '+Math.max(0,Number(track.vote_count||0)),'vote'):'',
+    track.lora_label||track.lora_id?chip('LoRA · '+(track.lora_label||track.lora_id)):'',
+    track.seed?chip('Seed · '+track.seed):''
+  ].join('');
+  genreValue.textContent=(track.genre||track.prompt?.genre||'—');
+  themeValue.textContent=track.theme||'—';
+  captionValue.textContent=captionText||' ';
+  durationValue.textContent=track.duration?`${fmtTime(track.duration)} · ${track.duration}s`:'—';
+  lyrics.textContent=getDisplayedLyrics(track);
+}
+function renderList(target, tracks, emptyText){
+  if(!tracks||!tracks.length){
+    target.innerHTML=`<div class="empty">${emptyText}</div>`;
+    return;
+  }
+  target.innerHTML=tracks.map(t=>`
+    <div class="item">
+      <div class="item-title">${t.song_title||'Untitled'}</div>
+      <div class="item-meta">${(t.language||'?').toUpperCase()} · ${t.bpm||'—'} BPM · ${t.key_scale||'—'} · ${t.duration?fmtTime(t.duration):'0:00'}</div>
+      <div class="item-genre-theme">${(t.genre||t.prompt?.genre)?`Genre: ${t.genre||t.prompt?.genre}`:''}${(t.genre||t.prompt?.genre)&&t.theme?' · ':''}${t.theme?`Theme: ${t.theme}`:''}</div>
+      <div class="item-caption">${getTrackCaption(t)||'&nbsp;'}</div>
+    </div>
+  `).join('');
+}
+async function tick(){
+  try{
+    const statusResult=await fetch('/api/radio/status').then(async r=>({data:await r.json(),receivedAt:performance.now()}));
+    const data=statusResult.data||{};
+    const cur=data.current_track||data.current||null;
+    const running=!!data.running&&!!cur;
+    const syncPoint=makePlaybackSyncPoint(Number(data.playback_elapsed||0),statusResult.receivedAt);
+    state.textContent=running?'On Air':'Offline';
+    state.className='pill'+(running?' live':'');
+    listenerCount.textContent=`${Math.max(0,Number(data.listener_count||0))} listening`;
+    setTrack(cur);
+    const queueTracks=[data.next_track,...(Array.isArray(data.reservoir)?data.reservoir:[])].filter(Boolean);
+    renderList(queueList,queueTracks,'Nothing queued yet.');
+    queueCount.textContent=`${Math.max(queueTracks.length,Number(data.prepared_count||0))} track${Math.max(queueTracks.length,Number(data.prepared_count||0))!==1?'s':''} ready`;
+    renderList(recentList,Array.isArray(data.recently_played)?data.recently_played.slice(0,10):[],'No recent tracks yet.');
+    const sameTrack=!!(cur&&currentTrackId&&cur.id===currentTrackId&&player.getAttribute('src')===cur.audio_url);
+    if(cur?.audio_url&&!sameTrack){
+      currentTrackId=cur.id||'';
+      player.src=cur.audio_url;
+      player.load();
+      player.addEventListener('canplay',()=>{applyPlayerSyncPoint(syncPoint);ensureListenPlayback(player).catch(()=>{});},{once:true});
+    } else if(cur?.audio_url&&sameTrack&&player.paused){
+      applyPlayerSyncPoint(syncPoint);
+      ensureListenPlayback(player).catch(()=>{});
+    }
+    if(!running&&!cur){
+      currentTrackId='';
+      player.removeAttribute('src');
+      player.load();
+    }
+  }catch(e){
+    state.textContent='Error';
+    state.className='pill';
+    nowDesc.textContent=String(e&&e.message||e);
+  }
+}
+tick();
+setInterval(tick,4000);
+</script>
+</body>
+</html>

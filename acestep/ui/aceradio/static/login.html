@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" data-aceradio-lang-mode="browser">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AceRadio Admin Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d1117;color:#f3f5f7;font-family:Inter,system-ui,sans-serif}
+    .card{width:min(440px,calc(100vw - 32px));background:#151b23;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:26px;box-shadow:0 20px 50px rgba(0,0,0,.35)}.lang-row{display:flex;justify-content:flex-end;margin-bottom:8px}.lang-select{padding:8px 10px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#0f141c;color:#fff;font:inherit;font-weight:700}
+    h1,p{margin:0}.muted{color:#9ba7b4}.stack{display:grid;gap:14px;margin-top:18px}.field{display:grid;gap:8px}.field input{background:#0f141c;border:1px solid rgba(255,255,255,.1);color:#fff;border-radius:14px;padding:12px 14px;font:inherit}.row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:18px}.btn{border:0;border-radius:14px;padding:12px 16px;font-weight:800;background:#3b82f6;color:#fff;cursor:pointer}.btn:disabled{opacity:.6;cursor:wait}.ghost{color:#9ba7b4;font-size:.92rem}.err{margin-top:14px;color:#ff9a9a;min-height:1.2em}
+    code{background:#0f141c;border-radius:8px;padding:2px 6px}
+
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="lang-row"><select id="uiLangLogin" class="lang-select" data-lang-select><option value="auto">AUTO</option><option value="en">EN</option><option value="it">IT</option></select></div>
+    <h1>AceRadio admin</h1>
+    <p class="muted" style="margin-top:8px">Questa è la porta blindata. La pagina <code>/listen</code> resta pubblica per gli amici.</p>
+    <form id="loginForm" class="stack">
+      <label class="field"><span>Username</span><input id="username" name="username" autocomplete="username" required></label>
+      <label class="field"><span>Password</span><input id="password" name="password" type="password" autocomplete="current-password" required></label>
+      <div class="row"><span class="ghost">Accesso admin richiesto</span><button class="btn" id="submitBtn" type="submit">Entra</button></div>
+    </form>
+    <div id="error" class="err"></div>
+  </div>
+<script src="/static/i18n.js"></script>
+<script>
+const form=document.getElementById('loginForm');
+const error=document.getElementById('error');
+const submitBtn=document.getElementById('submitBtn');
+form.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  error.textContent='';
+  submitBtn.disabled=true;
+  try{
+    const payload={username:form.username.value,password:form.password.value};
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.detail||'Login failed');
+    location.href='/';
+  }catch(err){
+    error.textContent=String(err && err.message || err);
+  }finally{ submitBtn.disabled=false; }
+});
+
+</script>
+</body>
+</html>

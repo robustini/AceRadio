@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+if [[ -f "$SCRIPT_DIR/.venv/bin/activate" ]]; then
+  source "$SCRIPT_DIR/.venv/bin/activate"
+elif [[ -f "$SCRIPT_DIR/venv/bin/activate" ]]; then
+  source "$SCRIPT_DIR/venv/bin/activate"
+fi
+PY="$SCRIPT_DIR/.venv/bin/python"
+[[ -x "$PY" ]] || PY="$SCRIPT_DIR/venv/bin/python"
+[[ -x "$PY" ]] || PY=python3
+
+export PYTHONNOUSERSITE=1
+unset PYTHONHOME || true
+unset PYTHONPATH || true
+export PYTORCH_ALLOC_CONF=expandable_segments:True
+export CUDA_MODULE_LOADING=LAZY
+TORCH_LIB="$SCRIPT_DIR/.venv/lib/python3.11/site-packages/torch/lib"
+[[ -d "$TORCH_LIB" ]] || TORCH_LIB="$SCRIPT_DIR/venv/lib/python3.11/site-packages/torch/lib"
+[[ -d "$TORCH_LIB" ]] && export LD_LIBRARY_PATH="$TORCH_LIB:${LD_LIBRARY_PATH:-}"
+
+CFG_FILE="$SCRIPT_DIR/.aceradio_last"
+[[ -f "$CFG_FILE" ]] && source "$CFG_FILE"
+
+export PORT="${PORT:-7862}"
+export SERVER_NAME="${SERVER_NAME:-0.0.0.0}"
+export ACESTEP_REMOTE_CONFIG_PATH="${ACESTEP_REMOTE_CONFIG_PATH:-acestep-v15-turbo}"
+export ACESTEP_REMOTE_LM_MODEL_PATH="${ACESTEP_REMOTE_LM_MODEL_PATH:-acestep-5Hz-lm-4B}"
+export ACESTEP_REMOTE_DEVICE="${ACESTEP_REMOTE_DEVICE:-auto}"
+export ACESTEP_REMOTE_LM_BACKEND="${ACESTEP_REMOTE_LM_BACKEND:-vllm}"
+export ACESTEP_REMOTE_RESULTS_DIR="${ACESTEP_REMOTE_RESULTS_DIR:-$SCRIPT_DIR/aceradio_outputs}"
+export ACESTEP_REMOTE_INIT_LLM="${ACESTEP_REMOTE_INIT_LLM:-1}"
+export ACERADIO_AUTH_ENABLED="${ACERADIO_AUTH_ENABLED:-0}"
+export ACERADIO_SESSION_SECURE="${ACERADIO_SESSION_SECURE:-0}"
+export ACERADIO_BYPASS_CORE_TURBO_STEP_CLAMP="${ACERADIO_BYPASS_CORE_TURBO_STEP_CLAMP:-1}"
+export ACERADIO_CLEANUP_TTL_SECONDS="${ACERADIO_CLEANUP_TTL_SECONDS:-0}"
+export ACERADIO_OLLAMA_BASE_URL="${ACERADIO_OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
+export ACERADIO_OLLAMA_MODEL="${ACERADIO_OLLAMA_MODEL:-qwen3.5:9b}"
+export ACERADIO_AUDIO_FORMAT="${ACERADIO_AUDIO_FORMAT:-mp3}"
+
+echo
+echo "============================================"
+echo "AceRadio Launcher Wizard"
+echo "============================================"
+echo
+if [[ -f "$CFG_FILE" ]]; then
+  echo "Saved configuration found:"
+  echo "  Model:  $ACESTEP_REMOTE_CONFIG_PATH"
+  echo "  LM:     $ACESTEP_REMOTE_LM_MODEL_PATH"
+  echo "  Device: $ACESTEP_REMOTE_DEVICE"
+  echo "  Port:   $PORT"
+  echo "  Ollama: $ACERADIO_OLLAMA_MODEL"
+  read -rp "Use the last saved configuration? [Y/n]: " USE_LAST
+  case "${USE_LAST:-Y}" in
+    Y|y|yes|YES) exec "$PY" -m acestep.ui.aceradio.run --host "$SERVER_NAME" --port "$PORT" ;;
+  esac
+fi
+
+echo "Preset:"
+echo "  1 = 8 GB     (offload + int8, LM 0.6B)"
+echo "  2 = 12-16 GB (balanced mix, LM 1.7B)"
+echo "  3 = 24 GB+   (no offload, LM 4B) [default]"
+echo "  C = custom"
+read -rp "Choice [3]: " PRESET
+PRESET="${PRESET:-3}"
+case "$PRESET" in
+  1)
+    export ACESTEP_REMOTE_LM_MODEL_PATH="acestep-5Hz-lm-0.6B"
+    export ACESTEP_REMOTE_OFFLOAD_TO_CPU=1
+    export ACESTEP_REMOTE_OFFLOAD_DIT_TO_CPU=1
+    export ACESTEP_REMOTE_INT8_QUANTIZATION=1
+    export ACESTEP_REMOTE_COMPILE_MODEL=1
+    export ACESTEP_REMOTE_USE_FLASH_ATTENTION=1
+    export ACESTEP_REMOTE_LM_OFFLOAD_TO_CPU=1
+    ;;
+  2)
+    export ACESTEP_REMOTE_LM_MODEL_PATH="acestep-5Hz-lm-1.7B"
+    export ACESTEP_REMOTE_OFFLOAD_TO_CPU=0
+    export ACESTEP_REMOTE_OFFLOAD_DIT_TO_CPU=0
+    export ACESTEP_REMOTE_INT8_QUANTIZATION=0
+    export ACESTEP_REMOTE_COMPILE_MODEL=0
+    export ACESTEP_REMOTE_USE_FLASH_ATTENTION=1
+    export ACESTEP_REMOTE_LM_OFFLOAD_TO_CPU=0
+    ;;
+  3)
+    export ACESTEP_REMOTE_LM_MODEL_PATH="acestep-5Hz-lm-4B"
+    export ACESTEP_REMOTE_OFFLOAD_TO_CPU=0
+    export ACESTEP_REMOTE_OFFLOAD_DIT_TO_CPU=0
+    export ACESTEP_REMOTE_INT8_QUANTIZATION=0
+    export ACESTEP_REMOTE_COMPILE_MODEL=0
+    export ACESTEP_REMOTE_USE_FLASH_ATTENTION=1
+    export ACESTEP_REMOTE_LM_OFFLOAD_TO_CPU=0
+    ;;
+  *)
+    read -rp "DiT config [acestep-v15-turbo]: " ACESTEP_REMOTE_CONFIG_PATH
+    export ACESTEP_REMOTE_CONFIG_PATH="${ACESTEP_REMOTE_CONFIG_PATH:-acestep-v15-turbo}"
+    read -rp "LM model [acestep-5Hz-lm-1.7B]: " ACESTEP_REMOTE_LM_MODEL_PATH
+    export ACESTEP_REMOTE_LM_MODEL_PATH="${ACESTEP_REMOTE_LM_MODEL_PATH:-acestep-5Hz-lm-1.7B}"
+    read -rp "Device [auto]: " ACESTEP_REMOTE_DEVICE
+    export ACESTEP_REMOTE_DEVICE="${ACESTEP_REMOTE_DEVICE:-auto}"
+    read -rp "Offload CPU (0/1) [0]: " ACESTEP_REMOTE_OFFLOAD_TO_CPU
+    export ACESTEP_REMOTE_OFFLOAD_TO_CPU="${ACESTEP_REMOTE_OFFLOAD_TO_CPU:-0}"
+    read -rp "Offload DiT CPU (0/1) [0]: " ACESTEP_REMOTE_OFFLOAD_DIT_TO_CPU
+    export ACESTEP_REMOTE_OFFLOAD_DIT_TO_CPU="${ACESTEP_REMOTE_OFFLOAD_DIT_TO_CPU:-0}"
+    read -rp "INT8 (0/1) [0]: " ACESTEP_REMOTE_INT8_QUANTIZATION
+    export ACESTEP_REMOTE_INT8_QUANTIZATION="${ACESTEP_REMOTE_INT8_QUANTIZATION:-0}"
+    read -rp "Compile model (0/1) [0]: " ACESTEP_REMOTE_COMPILE_MODEL
+    export ACESTEP_REMOTE_COMPILE_MODEL="${ACESTEP_REMOTE_COMPILE_MODEL:-0}"
+    read -rp "Flash attention (0/1) [1]: " ACESTEP_REMOTE_USE_FLASH_ATTENTION
+    export ACESTEP_REMOTE_USE_FLASH_ATTENTION="${ACESTEP_REMOTE_USE_FLASH_ATTENTION:-1}"
+    read -rp "LM offload CPU (0/1) [0]: " ACESTEP_REMOTE_LM_OFFLOAD_TO_CPU
+    export ACESTEP_REMOTE_LM_OFFLOAD_TO_CPU="${ACESTEP_REMOTE_LM_OFFLOAD_TO_CPU:-0}"
+    ;;
+esac
+
+read -rp "Ollama model [qwen3.5:9b]: " ACERADIO_OLLAMA_MODEL
+export ACERADIO_OLLAMA_MODEL="${ACERADIO_OLLAMA_MODEL:-qwen3.5:9b}"
+read -rp "Ollama base URL [http://127.0.0.1:11434]: " ACERADIO_OLLAMA_BASE_URL
+export ACERADIO_OLLAMA_BASE_URL="${ACERADIO_OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
+read -rp "Device [auto]: " ACESTEP_REMOTE_DEVICE
+export ACESTEP_REMOTE_DEVICE="${ACESTEP_REMOTE_DEVICE:-auto}"
+read -rp "Port [7862]: " PORT
+export PORT="${PORT:-7862}"
+read -rp "Bind address [0.0.0.0]: " SERVER_NAME
+export SERVER_NAME="${SERVER_NAME:-0.0.0.0}"
+read -rp "Audio format [mp3]: " ACERADIO_AUDIO_FORMAT
+export ACERADIO_AUDIO_FORMAT="${ACERADIO_AUDIO_FORMAT:-mp3}"
+read -rp "Output dir [$SCRIPT_DIR/aceradio_outputs]: " ACESTEP_REMOTE_RESULTS_DIR
+export ACESTEP_REMOTE_RESULTS_DIR="${ACESTEP_REMOTE_RESULTS_DIR:-$SCRIPT_DIR/aceradio_outputs}"
+read -rp "Enable auth (0/1) [0]: " ACERADIO_AUTH_ENABLED
+export ACERADIO_AUTH_ENABLED="${ACERADIO_AUTH_ENABLED:-0}"
+if [[ "$ACERADIO_AUTH_ENABLED" == "1" ]]; then
+  read -rp "Secure session (0/1) [0]: " ACERADIO_SESSION_SECURE
+  export ACERADIO_SESSION_SECURE="${ACERADIO_SESSION_SECURE:-0}"
+  read -rp "Username [admin]: " ACERADIO_USERNAME
+  export ACERADIO_USERNAME="${ACERADIO_USERNAME:-admin}"
+  read -rsp "Password [change-me]: " ACERADIO_PASSWORD
+  echo
+  export ACERADIO_PASSWORD="${ACERADIO_PASSWORD:-change-me}"
+fi
+
+cat > "$CFG_FILE" <<EOF
+export PORT="$PORT"
+export SERVER_NAME="$SERVER_NAME"
+export ACESTEP_REMOTE_CONFIG_PATH="$ACESTEP_REMOTE_CONFIG_PATH"
+export ACESTEP_REMOTE_LM_MODEL_PATH="$ACESTEP_REMOTE_LM_MODEL_PATH"
+export ACESTEP_REMOTE_DEVICE="$ACESTEP_REMOTE_DEVICE"
+export ACESTEP_REMOTE_LM_BACKEND="$ACESTEP_REMOTE_LM_BACKEND"
+export ACESTEP_REMOTE_RESULTS_DIR="$ACESTEP_REMOTE_RESULTS_DIR"
+export ACESTEP_REMOTE_INIT_LLM="$ACESTEP_REMOTE_INIT_LLM"
+export ACESTEP_REMOTE_OFFLOAD_TO_CPU="${ACESTEP_REMOTE_OFFLOAD_TO_CPU:-0}"
+export ACESTEP_REMOTE_OFFLOAD_DIT_TO_CPU="${ACESTEP_REMOTE_OFFLOAD_DIT_TO_CPU:-0}"
+export ACESTEP_REMOTE_INT8_QUANTIZATION="${ACESTEP_REMOTE_INT8_QUANTIZATION:-0}"
+export ACESTEP_REMOTE_COMPILE_MODEL="${ACESTEP_REMOTE_COMPILE_MODEL:-0}"
+export ACESTEP_REMOTE_USE_FLASH_ATTENTION="${ACESTEP_REMOTE_USE_FLASH_ATTENTION:-1}"
+export ACESTEP_REMOTE_LM_OFFLOAD_TO_CPU="${ACESTEP_REMOTE_LM_OFFLOAD_TO_CPU:-0}"
+export ACERADIO_OLLAMA_BASE_URL="$ACERADIO_OLLAMA_BASE_URL"
+export ACERADIO_OLLAMA_MODEL="$ACERADIO_OLLAMA_MODEL"
+export ACERADIO_AUDIO_FORMAT="$ACERADIO_AUDIO_FORMAT"
+export ACERADIO_AUTH_ENABLED="$ACERADIO_AUTH_ENABLED"
+export ACERADIO_SESSION_SECURE="$ACERADIO_SESSION_SECURE"
+export ACERADIO_USERNAME="${ACERADIO_USERNAME:-}"
+export ACERADIO_PASSWORD="${ACERADIO_PASSWORD:-}"
+export ACERADIO_BYPASS_CORE_TURBO_STEP_CLAMP="$ACERADIO_BYPASS_CORE_TURBO_STEP_CLAMP"
+export ACERADIO_CLEANUP_TTL_SECONDS="$ACERADIO_CLEANUP_TTL_SECONDS"
+EOF
+
+echo
+echo "Starting AceRadio UI..."
+echo "http://$SERVER_NAME:$PORT/"
+exec "$PY" -m acestep.ui.aceradio.run --host "$SERVER_NAME" --port "$PORT"

@@ -1,0 +1,715 @@
+<!doctype html><html lang="en" data-aceradio-lang-mode="storage"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AceRadio V1.0</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/static/style.css?v=60"></head><body>
+<div id="bootstrapOverlay" class="bootstrap-overlay"><div class="bootstrap-card"><h2>AceRadio is initializing</h2><p id="bootstrapMessage">Starting AceRadio bootstrap…</p><div id="bootstrapPhase" class="muted">booting</div></div></div>
+<div class="wrap">
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <img src="/static/logo-marcopter-white_8k.png" alt="Marcopter">
+      <div class="sidebar-header-text">
+        <h1 id="title">AceRadio V1.0</h1>
+        <p id="subtitle">AI Web Radio · Ace-Step V1.5</p>
+      </div>
+      <div class="sidebar-lang">
+        <select id="uiLang" data-lang-select><option value="auto">AUTO</option><option value="en">EN</option><option value="it">IT</option></select>
+      </div>
+      <button id="logoutBtn" class="logout-btn" title="Logout" style="display:none" onclick="doLogout()">⏏</button>
+    </div>
+
+    <div class="sidebar-scroll">
+
+      <details class="s-section sec-station" open>
+        <summary>Station</summary>
+        <div class="s-body station-body">
+          <div class="sidebar-subtitle">Station direction</div>
+          <div class="field full hero-field"><label>Station direction <span class="field-hint">Creative brief sent to the LM. It defines mood, emotional tone and the overall radio identity.</span></label><textarea id="stationPrompt" rows="3">Late-night radio for city insomniacs: cinematic, melodic, emotionally rich, and never predictable.</textarea></div>
+          <div class="field full hero-field"><label>Negative direction <span class="field-hint">Negative guidance sent to the LM. It defines what the station should avoid: dead air, long silent intros/outros, weak generic structure, repetitive ideas, overlong fade-outs, empty arrangements, or other unwanted traits.</span></label><textarea id="stationNegativePrompt" rows="3" placeholder="Avoid long silence at the beginning or end, dead air, repetitive lyrics, weak generic arrangements, empty intros, overlong fade-outs, and monotonous captions."></textarea></div>
+
+          <div class="sidebar-subtitle">Genres</div>
+          <div class="field full field-chip-block">
+            <div class="chips-label-row">
+              <span class="chips-label">Active genres</span>
+              <button type="button" id="genreSelectAllBtn" class="chips-ctrl-btn" onclick="selectAllGenres()">All</button>
+              <button type="button" id="genreClearBtn" class="chips-ctrl-btn" onclick="clearAllGenres()">None</button>
+            </div>
+            <div id="genreChips" class="chips"></div>
+          </div>
+
+          <div class="sidebar-subtitle">Themes</div>
+          <div class="field full field-chip-block">
+            <div class="chips-label-row">
+              <span class="chips-label">Active themes</span>
+              <button type="button" id="themeSelectAllBtn" class="chips-ctrl-btn" onclick="selectAllThemes()">All</button>
+              <button type="button" id="themeClearBtn" class="chips-ctrl-btn" onclick="clearAllThemes()">None</button>
+            </div>
+            <div id="themeChips" class="chips"></div>
+          </div>
+
+          <div class="sidebar-subtitle">Languages</div>
+          <div class="field full field-chip-block"><div class="chips-label">Available languages</div><div id="languageChips" class="chips"></div></div>
+
+          <div class="sidebar-subtitle">Custom JSON catalog</div>
+          <div class="field full custom-catalog-block">
+            <label>Exclusive custom catalog <span class="field-hint">Load a JSON song catalog in AceRadio format. While active, AceRadio pulls songs only from this file, ignores genre/theme/language filters, and keeps the LoRA catalog available.</span></label>
+            <input id="customCatalogPath" type="text" readonly placeholder="No custom JSON catalog loaded">
+            <input id="customCatalogFileInput" type="file" accept=".json,application/json" hidden>
+            <div id="customCatalogActions" class="cfg-row custom-catalog-actions">
+              <button id="customCatalogBrowseBtn" class="cfg-btn cfg-browse" type="button">Browse…</button>
+              <button id="customCatalogApplyBtn" class="cfg-btn cfg-apply" type="button" disabled hidden>Apply</button>
+              <button id="customCatalogRemoveBtn" class="cfg-btn cfg-clear-cache" type="button" disabled hidden>Remove</button>
+            </div>
+            <div id="customCatalogInfo" class="settings-status-block" style="margin-top:8px">No custom catalog active.</div>
+          </div>
+
+          <div class="sidebar-subtitle">Generation parameters</div>
+          <div class="grid2 station-grid">
+            <div class="field"><label>Lang rotation</label><select id="languageRotationMode"><option value="round_robin">Round robin</option><option value="random">Random</option></select></div>
+            <div class="field"><label>Generation Mode <span class="field-hint">Choose live AI generation, a local catalog, or a hybrid mix of both.</span></label><select id="generationMode"><option value="ai_generated">AI generated</option><option value="local_catalog">Local catalog</option><option value="hybrid">Hybrid</option></select></div>
+            <div class="field" id="catalogSourceRow" hidden aria-hidden="true"><label>Catalog Source <span class="field-hint">Choose which local catalog is used whenever local catalog access is enabled.</span></label><select id="catalogSource" disabled><option value="library">Library</option><option value="generated">AI catalog</option><option value="all_local">All local</option></select></div>
+            <div class="field" id="generationSourceBothRow" hidden aria-hidden="true"><label>File chance % <span class="field-hint">When Generation Mode is Hybrid, this is the probability that the next track is pulled from the selected local catalog.</span></label><input id="generationSourceBothPercent" type="number" min="0" max="100" value="50" disabled></div>
+            <div class="field"><label>Instrumental % <span class="field-hint">Chance of requesting an instrumental track instead of a vocal song.</span></label><input id="instrumentalProbability" type="number" min="0" max="100" value="25"></div>
+            <div class="field" id="minDurationRow"><label>Min dur (s)</label><input id="minDuration" type="number" min="30" max="600" value="60"></div>
+            <div class="field" id="maxDurationRow"><label>Max dur (s)</label><input id="maxDuration" type="number" min="30" max="600" value="90"></div>
+            <div class="field field-auto-duration full" id="automaticDurationRow"><label>Automatic duration <span class="field-hint">Uses a natural radio-song length and ignores Min/Max duration while enabled.</span></label><div class="toggle-card"><label><input id="automaticDuration" type="checkbox"> Enabled</label><span class="toggle-card-note">Uses Min/Max only when off</span></div></div>
+            <div class="field"><label>LoRA use % <span class="field-hint">Probability of applying one of the enabled LoRAs. 100 = always try, 0 = never use LoRA.</span></label><input id="loraUseProbability" type="number" min="0" max="100" value="100"></div>
+            <div class="field"><label>Auto transition cut (s) <span class="field-hint">Absolute second from the start of the song that triggers the normal automatic transition. 0 keeps the standard end-of-track behavior.</span></label><input id="autoTransitionCutSeconds" type="number" min="0" max="7200" step="1" value="0"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="s-section sec-model" open>
+        <summary>Model and Audio Format</summary>
+        <div class="s-body">
+          <div class="field full">
+            <label>DiT model <span class="field-hint">base / sft / turbo variant used for generation</span></label>
+            <select id="model"></select>
+          </div>
+          <div class="grid2">
+
+            <div class="field" style="justify-content:flex-end"><div class="toggles-row" style="margin-bottom:0"><label><input id="useAdg" type="checkbox"> Use ADG <span class="field-hint">experimental stability assist</span></label></div></div>
+            <div class="field"><label>Inference steps <span class="field-hint">higher = slower but usually better</span></label><input id="inferenceSteps" type="number" min="1" max="200" value="8"></div>
+            <div class="field"><label>Inference method <span class="field-hint">ODE default, SDE can alter the path</span></label><select id="inferMethod"><option value="ode">ode</option><option value="sde">sde</option></select></div>
+            <div class="field"><label>Guidance scale <span class="field-hint">how strongly diffusion follows the prompt</span></label><input id="guidanceScale" type="number" step="0.1" value="7.0"></div>
+            <div class="field"><label>Shift <span class="field-hint" id="shiftAutoHint">Auto: 3 for non-Base/SFT DiT models. You can still edit it.</span></label><input id="shift" type="number" step="0.1" min="1" max="5" value="3.0"></div>
+            <div class="field"><label>CFG interval start <span class="field-hint">early-step stabilization window start</span></label><input id="cfgStart" type="number" step="0.01" value="0.0"></div>
+            <div class="field"><label>CFG interval end <span class="field-hint">late-step stabilization window end</span></label><input id="cfgEnd" type="number" step="0.01" value="1.0"></div>
+            <div class="field"><label>Normalization target dB <span class="field-hint">-1 dB is the safe peak default</span></label><input id="normalizationDb" type="number" step="0.1" value="-1.0"></div>
+            <div class="field"><label>Quality score sensitivity <span class="field-hint">lower = more sensitive score mapping</span></label><input id="scoreScale" type="number" step="0.01" min="0.01" max="1" value="0.5"></div>
+            <div class="field"><label>Latent shift <span class="field-hint">small negative values can reduce clipping</span></label><input id="latentShift" type="number" step="0.01" value="0.0"></div>
+            <div class="field"><label>Latent rescale <span class="field-hint">1.0 = no latent rescale</span></label><input id="latentRescale" type="number" step="0.01" value="1.0"></div>
+            <div class="field" style="justify-content:flex-end"><div class="toggles-row" style="margin-bottom:0"><label><input id="enableNormalization" type="checkbox" checked> Audio normalization</label></div></div>
+            <div class="field" style="justify-content:flex-end"><div class="toggles-row" style="margin-bottom:0"><label><input id="autoScore" type="checkbox"> Auto score after generation</label></div></div>
+            <div class="field full"><label>Timesteps schedule <span class="field-hint">comma-separated values from 1.0 to 0.0, overrides default schedule</span></label><input id="timesteps" placeholder="0.97,0.76,0.615,0.5,0.395,0.28,0.18,0.085,0"></div>
+            <div class="field full">
+              <label>Audio format <span class="field-hint">saved file</span></label>
+              <div id="audioFormatChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:3px"></div>
+              <input type="hidden" id="audioFormat" value="mp3">
+            </div>
+            <div class="field full" id="mp3GenerationControls" style="display:none">
+              <label>MP3 export settings <span class="field-hint">applied only when MP3 is selected</span></label>
+              <div class="grid2">
+                <div class="field">
+                  <label>MP3 bitrate</label>
+                  <select id="mp3Bitrate">
+                    <option value="128k" selected>128 kbps</option>
+                    <option value="192k">192 kbps</option>
+                    <option value="256k">256 kbps</option>
+                    <option value="320k">320 kbps</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>MP3 sample rate</label>
+                  <select id="mp3SampleRate">
+                    <option value="48000" selected>48 kHz</option>
+                    <option value="44100">44.1 kHz</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="s-section sec-lora" open>
+        <summary>LoRA</summary>
+        <div class="s-body"><div id="loraList" class="lora-list"></div></div>
+      </details>
+
+      <details class="s-section sec-lm">
+        <summary>LM / Ollama</summary>
+        <div class="s-body">
+          <div class="toggles-row">
+            <label><input id="thinking" type="checkbox" checked> Enable LM planning</label>
+            <label><input id="useConstrainedDecoding" type="checkbox" checked> Constrained decoding</label>
+            <label><input id="useCotMetas" type="checkbox" checked> CoT metas</label>
+            <label><input id="useCotCaption" type="checkbox" checked> Caption rewrite</label>
+            <label><input id="useCotLanguage" type="checkbox" checked> CoT language</label>
+            <label><input id="parallelThinking" type="checkbox"> Parallel thinking</label>
+            <label><input id="constrainedDecodingDebug" type="checkbox"> Constrained decoding debug</label>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>LM temperature <span class="field-hint">higher = more random planning</span></label><input id="lmTemperature" type="number" step="0.01" min="0" max="2" value="0.85"></div>
+            <div class="field"><label>LM CFG scale <span class="field-hint">1.0 disables CFG</span></label><input id="lmCfgScale" type="number" step="0.1" min="1" max="3" value="2.0"></div>
+            <div class="field"><label>LM top-K <span class="field-hint">0 disables top-K</span></label><input id="lmTopK" type="number" min="0" max="200" value="0"></div>
+            <div class="field"><label>LM top-P <span class="field-hint">1.0 disables top-P</span></label><input id="lmTopP" type="number" step="0.01" min="0" max="1" value="0.9"></div>
+            <div class="field full"><label>LM negative prompt <span class="field-hint">used only when LM CFG is active</span></label><textarea id="lmNegativePrompt" rows="3" placeholder="NO USER INPUT">NO USER INPUT</textarea></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="s-section sec-runtime">
+        <summary>Runtime</summary>
+        <div class="s-body">
+          <div class="toggles-row">
+          </div>
+          <div class="grid2">
+            <div class="field"><label>VRAM cleanup</label><select id="vramCleanupMode"><option value="fast">Fast</option><option value="balanced" selected>Balanced</option><option value="aggressive">Aggressive</option></select></div>
+            <div class="field"><label>Reservoir target <span class="field-hint">max queue</span></label><input id="reservoirTarget" type="number" min="1" max="50" value="10"></div>
+            <div class="field"><label>Refill threshold <span class="field-hint">trigger below</span></label><input id="refillThreshold" type="number" min="1" max="20" value="3"></div>
+            <div class="field"><label>Current queue</label><div id="reservoirTargetInfo" class="statbox">0 / 10</div></div>
+            <div class="field"><label>Keep on disk <span class="field-hint">How many songs stay on disk. 0 means unlimited.</span></label><input id="maxSavedTracks" type="number" min="0" max="10000" value="100"></div>
+          </div>
+          <div class="grid2" style="margin-top:8px">
+            <div class="field full">
+              <label>Cached tracks <span class="field-hint">pre-generated in aceradio_outputs — played first</span></label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div id="cacheReadyBox" class="statbox" style="flex:1">0 tracks</div>
+                <button id="rescanCacheBtn" class="cfg-btn cfg-apply" onclick="rescanCache()" style="flex-shrink:0" title="Rebuild cache from disk and remove incomplete cache folders">↺ Rebuild cache</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="s-section sec-stream" open>
+        <summary>Live Streaming</summary>
+        <div class="s-body">
+          <div class="grid2">
+            <div class="field">
+              <label>Protocol</label>
+              <select id="streamProtocol" onchange="onStreamProtocolChange()">
+                <option value="icecast">Icecast 2</option>
+                <option value="shoutcast">Shoutcast v1</option>
+                <option value="shoutcast2">Shoutcast v2</option>
+                <option value="rtmp">RTMP</option>
+                <option value="srt">SRT</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Server template</label>
+              <select id="streamPreset" onchange="applyStreamPreset(this.value)">
+                <option value="custom">Custom</option>
+                <option value="listen2myradio_free">Listen2MyRadio Free (legacy)</option>
+                <option value="listen2myradio_shoutcast2_autodj">Listen2MyRadio Free / Shoutcast2 (Stream password + Stream ID)</option>
+                <option value="listen2myradio_live_only">Listen2MyRadio Live Only (AutoDJ OFF / Source Password)</option>
+                <option value="generic_icecast2">Generic Icecast 2</option>
+                <option value="generic_shoutcast2">Generic Shoutcast v2</option>
+                <option value="generic_rtmp">Generic RTMP</option>
+                <option value="generic_srt">Generic SRT</option>
+              </select>
+            </div>
+            <div class="field"><label>Host</label><input id="streamHost" value="localhost" placeholder="server IP or hostname"></div>
+            <div class="field"><label id="streamPortLabel">Port</label><input id="streamPort" type="number" value="8000"></div>
+            <div class="field full" id="streamMountRow"><label id="streamMountLabel">Mountpoint</label><input id="streamMount" value="/stream"></div>
+            <div class="field" id="streamUserRow"><label for="streamUser" id="streamUserLabel">Username</label><input id="streamUser" value="" placeholder="username"></div>
+            <div class="field"><label for="streamPass" id="streamPassLabel">Password</label><input id="streamPass" type="password" value="hackme"></div>
+            <div class="field"><label>Bitrate (kbps)</label><input id="streamBitrate" type="number" min="32" max="320" value="128"></div>
+            <div class="field">
+              <label>Format</label>
+              <select id="streamFormat">
+                <option value="mp3">MP3</option>
+                <option value="aac">AAC</option>
+                <option value="opus">Opus</option>
+              </select>
+            </div>
+            <div class="field full"><label>Station name</label><input id="streamName" value="AceRadio"></div>
+            <div class="field full"><label>Description</label><input id="streamDesc" value="AI-generated radio"></div>
+            <div class="field"><label>Genre</label><input id="streamGenre" value="Various"></div>
+            <div class="field" style="justify-content:flex-end"><label><input id="streamPublic" type="checkbox"> Public</label></div>
+          </div>
+          <div id="streamModeHelp" class="stream-help"></div>
+          <div class="stream-log-panel">
+            <div class="stream-log-title">Streaming error log</div>
+            <textarea id="streamLogBox" class="stream-log-box" spellcheck="false" readonly></textarea>
+          </div>
+          <div id="streamStatusBar" class="stream-status-bar off">
+            <span id="streamStatusDot" class="stream-dot"></span>
+            <span id="streamStatusText">Not streaming</span>
+          </div>
+          <div class="stream-validate-row">
+            <button id="streamValidateBtn" disabled class="stream-btn stream-validate-btn stream-validate-inline">Check streaming</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="s-section sec-jingles" open>
+        <summary>Jingles</summary>
+        <div class="s-body">
+          <div class="jingle-status-bar">
+            <span class="cfg-meta-label">Since overlay:</span>
+            <span id="jingleSinceOverlay" class="statbox">0 songs</span>
+            <span class="cfg-meta-label" style="margin-left:8px">Since sep.:</span>
+            <span id="jingleSinceSeparator" class="statbox">0 songs</span>
+          </div>
+          <div class="jingle-quick-btns" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+            <button class="cfg-btn cfg-jingle-overlay" onclick="jinglePlayOverlay()" title="Lancia subito un overlay random (usa il volume config del jingle, non il launch vol del deck)">🎙 Play Overlay Now</button>
+            <button class="cfg-btn cfg-jingle-separator" onclick="jinglePlaySeparator()" title="Lancia subito un separator random (usa il volume config del jingle, non il launch vol del deck)">⏩ Play Separator Now</button>
+            <button class="cfg-btn cfg-load" onclick="jingleReload()" title="Rescan jingle folders">↺ Rescan</button>
+          </div>
+          <div id="jingleActiveBar" class="jingle-active-bar" style="display:none">
+            <span class="jingle-active-icon">🎙</span>
+            <span id="jingleActiveLabel">Jingle playing…</span>
+          </div>
+          <div id="jingleList" class="jingle-list" style="margin-top:10px">
+            <div class="muted">Loading jingles…</div>
+          </div>
+
+          <div class="sidebar-subpanel jingle-timing-sidebar" id="jingleTimingPanel">
+            <div class="sidebar-subpanel-head">
+              <h3>Jingle Timing</h3>
+              <div class="muted">0 = current boundary behavior · >0 = start separator before track end · legacy negative values still work</div>
+            </div>
+            <div class="jtp-grid jtp-grid-sidebar">
+              <label class="jtp-field">
+                <span class="jtp-label">Separator start before end (s)</span>
+                <input id="jingleSeparatorArmOffset" type="number" step="0.1" min="-60" max="120" value="0">
+              </label>
+              <label class="jtp-field">
+                <span class="jtp-label">Legacy boundary min remaining offset (s)</span>
+                <input id="jingleSeparatorMinRemainingOffset" type="number" step="0.1" min="-30" max="30" value="0">
+              </label>
+              <label class="jtp-field">
+                <span class="jtp-label">Overlay midpoint offset (s)</span>
+                <input id="jingleOverlayMidOffset" type="number" step="0.1" min="-120" max="120" value="0">
+              </label>
+              <label class="jtp-field">
+                <span class="jtp-label">Overlay trigger window (s)</span>
+                <input id="jingleOverlayTriggerWindow" type="number" step="0.1" min="0.25" max="30" value="3">
+              </label>
+              <label class="jtp-field">
+                <span class="jtp-label">Overlay min track duration (s)</span>
+                <input id="jingleOverlayMinDuration" type="number" step="0.5" min="0" max="600" value="60">
+              </label>
+              <label class="jtp-field">
+                <span class="jtp-label">Separator fade (ms)</span>
+                <input id="adminSeparatorFadeMs" type="number" step="1" min="0" max="10000" value="500">
+              </label>
+              <label class="jtp-field">
+                <span class="jtp-label">Overlay pre-duck (ms)</span>
+                <input id="adminOverlayPreDuckMs" type="number" step="1" min="0" max="10000" value="300">
+              </label>
+              <label class="jtp-field">
+                <span class="jtp-label">Overlay restore (ms)</span>
+                <input id="adminOverlayRestoreMs" type="number" step="1" min="0" max="10000" value="700">
+              </label>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="s-section sec-storage">
+        <summary>Storage / Config / Logs</summary>
+        <div class="s-body storage-body">
+          <div class="storage-block storage-block-config">
+            <div class="storage-block-title">Config file</div>
+            <div class="field full"><label>Settings file</label><div id="settingsPath" class="settings-path-display"></div></div>
+            <div class="config-actions-row">
+              <button id="saveSettingsBtn" disabled class="cfg-btn cfg-save"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save</button>
+              <button id="saveAsSettingsBtn" disabled class="cfg-btn cfg-save-as"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 3h7v7"/><path d="M10 14L21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg> Save as…</button>
+            </div>
+            <div class="config-browse-row">
+              <button id="browseSettingsBtn" disabled class="cfg-btn cfg-browse"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Browse…</button>
+              <div id="pickedFileName" class="picked-file-name">No file selected</div>
+            </div>
+            <div id="settingsStatus" class="settings-status-block"></div>
+          </div>
+
+          <div class="storage-divider" aria-hidden="true"></div>
+
+          <div class="storage-block storage-block-maintenance">
+            <div class="storage-block-title">Storage maintenance</div>
+            <div class="config-meta-row">
+              <span class="cfg-meta-label">Saved tracks</span>
+              <span id="savedTracksInfo" class="statbox">0</span>
+            </div>
+            <div class="config-meta-row" style="margin-top:6px">
+              <span class="cfg-meta-label">Cache on disk</span>
+              <span id="cacheOnDiskBox" class="statbox">0 tracks</span>
+              <button id="clearCacheBtn" class="cfg-btn cfg-clear-cache" onclick="clearCache()" style="margin-left:auto">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                Clear cache
+              </button>
+              <button id="clearAllSongsBtn" class="cfg-btn cfg-clear-cache" onclick="clearAllSongs()" style="margin-left:8px">
+                <span>🧨</span>
+                <span data-i18n="common.clear_all_songs_button">Clear all songs</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="storage-divider" aria-hidden="true"></div>
+
+          <div class="storage-block storage-block-log">
+            <div class="stream-log-panel admin-log-panel">
+              <div class="stream-log-title admin-log-title-row">
+                <span>Admin / Runtime error log</span>
+                <div class="admin-log-title-spacer"></div>
+                <button id="clearAdminLogBtn" type="button" class="cfg-btn cfg-clear-cache admin-log-clear-btn">Clear</button>
+              </div>
+              <textarea id="adminLogBox" class="stream-log-box" spellcheck="false" readonly></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <div class="topbar">
+      <div class="radio-pill off" id="radioPill">OFF AIR</div>
+      <div class="muted" id="radioSubstate">Radio stopped</div>
+      <div class="topbar-status">
+        <div class="status-item"><strong>Status:</strong> <span id="running">idle</span></div>
+        <div class="status-item"><strong>Bootstrap:</strong> <span id="bootstrapBadge">booting</span></div>
+        <div class="status-item"><strong>Model:</strong> <span id="engineModel">-</span></div>
+        <div class="status-item"><strong>Ollama:</strong> <span id="ollamaName">-</span></div>
+        <div class="status-item"><strong>Reservoir:</strong> <span id="reservoirInfo">0 / 10</span></div>
+        <div class="status-item"><strong>Cache:</strong> <span id="cacheInfo">0 tracks</span></div>
+      </div>
+    </div>
+
+    <div class="btn-bar">
+      <div class="btn-bar-row btn-bar-row-main">
+        <button id="startBtn" disabled>▶ Start radio</button>
+        <button id="hardRefreshBtn" type="button" title="Reload this admin page with cache-busting and local cache cleanup.">⟳ Hard refresh</button>
+        <div class="btn-bar-divider"></div>
+        <button id="streamBtn" disabled class="stream-btn">⏺ Start stream</button>
+        <div id="streamQuickInfo" class="stream-quick-info" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <input id="monitorMuted" type="checkbox" hidden>
+
+    <div class="main-scroll">
+
+      <div class="panel panel-decks">
+        <div class="panel-head">
+          <h2>Dual Deck</h2>
+          <span class="deck-active-label" id="deckActiveLabel">DECK A ON AIR</span>
+        </div>
+        <div class="deck-body">
+
+          <div class="deck deck-a active-deck" id="deckA">
+            <div class="deck-toprow">
+              <span class="deck-id">A</span>
+              <span class="deck-badge on" id="deckABadge">ON AIR</span>
+              <button type="button" class="deck-download-btn" id="deckADownloadBtn" onclick="downloadDeckTrack('A')" title="Download current deck track" disabled>↓ Download</button>
+            </div>
+            <div class="deck-meta-row">
+              <canvas id="albumArtA" class="album-art" width="64" height="64"></canvas>
+              <div id="currentMeta" class="deck-meta">None</div>
+            </div>
+            <div class="waveform-wrap" id="waveformWrapA">
+              <canvas id="waveformA"></canvas>
+              <div class="waveform-progress" id="waveformProgressA"></div>
+            </div>
+            <div class="vu-wrap"><canvas class="vu-canvas" id="vuA"></canvas></div>
+            <audio id="player" preload="auto"></audio>
+            <div class="deck-controls">
+              <button class="deck-playbtn" id="deckAPlayBtn" onclick="toggleDeckA()">▶</button>
+              <div class="deck-time-col">
+                <span class="deck-time" id="deckATime">0:00</span>
+                <span class="deck-dur" id="deckADur">/ 0:00</span>
+              </div>
+              <div class="deck-seek-vol">
+                <input type="range" class="deck-seek" id="deckASeek" min="0" max="100" value="0" step="0.1">
+                <div class="deck-vol-row">
+                  <span class="deck-remaining" id="deckARemaining">-0:00</span>
+                  <span class="deck-vol-lbl">VOL</span>
+                  <input type="range" class="deck-vol" id="deckAVol" min="0" max="1" step="0.01" value="1" oninput="updateVolDb('A',this.value)">
+                  <span class="vol-db" id="deckAVolDb">0 dB</span>
+                </div>
+              </div>
+            </div>
+            <div class="deck-lyrics-wrap">
+              <div class="deck-lyrics-bar"><span class="deck-lyrics-lbl">Lyrics</span><button class="deck-scroll-toggle on" id="lyricsScrollToggleA" onclick="toggleDeckScroll('A')">↕ Auto</button></div>
+              <pre id="lyrics" class="deck-lyrics"></pre>
+            </div>
+          </div>
+
+          <div class="deck-speed-column">
+            <div class="deck-speed-label">Speed</div>
+            <div class="deck-speed-slider-shell">
+              <div class="deck-speed-scale" aria-hidden="true">
+                <span class="deck-speed-scale-top">2×</span>
+                <span class="deck-speed-scale-mid">1×</span>
+                <span class="deck-speed-scale-bottom">½×</span>
+              </div>
+              <div class="deck-speed-slider-wrap" id="currentSpeedSliderWrap" tabindex="0">
+                <div class="deck-speed-center-mark"></div>
+                <input type="range" id="currentSpeedSlider" class="deck-speed-slider" min="0" max="100" step="1" value="50" aria-label="Playback speed" aria-valuemin="50" aria-valuemax="200" aria-valuenow="100" aria-valuetext="100%">
+              </div>
+            </div>
+            <div class="deck-speed-value" id="currentSpeedValue">100%</div>
+            <button id="currentSpeedResetBtn" type="button" class="cfg-btn deck-speed-reset">↺ 100%</button>
+            <div class="cf-bpm-block deck-speed-bpm">
+              <span class="cf-bpm" id="bpmDisplay">—</span>
+              <span class="cf-bpm-lbl">BPM</span>
+            </div>
+          </div>
+
+          <div class="deck deck-b" id="deckB">
+            <div class="deck-toprow">
+              <span class="deck-id">B</span>
+              <span class="deck-badge cued" id="deckBBadge">CUE</span>
+              <button type="button" class="deck-download-btn" id="deckBDownloadBtn" onclick="downloadDeckTrack('B')" title="Download next deck track" disabled>↓ Download</button>
+            </div>
+            <div class="deck-meta-row">
+              <canvas id="albumArtB" class="album-art" width="64" height="64"></canvas>
+              <div id="nextMeta" class="deck-meta">None</div>
+            </div>
+            <div class="waveform-wrap" id="waveformWrapB">
+              <canvas id="waveformB"></canvas>
+              <div class="waveform-progress" id="waveformProgressB"></div>
+            </div>
+            <div class="vu-wrap"><canvas class="vu-canvas" id="vuB"></canvas></div>
+            <audio id="playerB" preload="auto"></audio>
+            <div class="deck-controls">
+              <button class="deck-playbtn" id="deckBPlayBtn" onclick="toggleDeckB()">▶</button>
+              <div class="deck-time-col">
+                <span class="deck-time" id="deckBTime">0:00</span>
+                <span class="deck-dur" id="deckBDur">/ 0:00</span>
+              </div>
+              <div class="deck-seek-vol">
+                <input type="range" class="deck-seek" id="deckBSeek" min="0" max="100" value="0" step="0.1">
+                <div class="deck-vol-row">
+                  <span class="deck-remaining" id="deckBRemaining">-0:00</span>
+                  <span class="deck-vol-lbl">VOL</span>
+                  <input type="range" class="deck-vol" id="deckBVol" min="0" max="1" step="0.01" value="1" oninput="updateVolDb('B',this.value)">
+                  <span class="vol-db" id="deckBVolDb">0 dB</span>
+                </div>
+              </div>
+            </div>
+            <div class="deck-lyrics-wrap">
+              <div class="deck-lyrics-bar"><span class="deck-lyrics-lbl">Lyrics</span><button class="deck-scroll-toggle on" id="lyricsScrollToggleB" onclick="toggleDeckScroll('B')">↕ Auto</button></div>
+              <pre id="lyricsB" class="deck-lyrics"></pre>
+            </div>
+          </div>
+
+          <div class="deck-bottom-controls">
+            <button id="skipBtn" disabled class="deck-bar-btn">⏭ Skip</button>
+            <button id="stopBtn" disabled class="deck-bar-btn deck-bar-btn-stop">■ Stop preview</button>
+            <button class="monitor-toggle" id="monitorMuteBtn" type="button" aria-pressed="false" title="Mute only local AceRadio playback in this browser. Stream and listen page continue.">
+              <span class="monitor-toggle-icon">🔊</span>
+              <span class="monitor-toggle-label">LOCAL ON</span>
+            </button>
+            <div class="admin-monitor-master" title="General volume for local admin prelisten only. Does not affect listen page or stream.">
+              <span class="admin-monitor-master-label">PRELISTEN MASTER</span>
+              <div class="admin-monitor-master-track">
+                <input type="range" class="admin-monitor-master-slider" id="adminMonitorLevel" min="0" max="1" step="0.01" value="1">
+              </div>
+              <span class="admin-monitor-master-db" id="adminMonitorDb">0.0 dB</span>
+              <span class="admin-monitor-master-pct" id="adminMonitorPct">100%</span>
+            </div>
+            <div class="crossfader-bar">
+              <div class="cf-deck-pill active cf-pill-inline" id="cfIndA">A</div>
+              <div class="crossfader-horizontal-wrap">
+                <div class="crossfader-horizontal-track">
+                  <input type="range" class="crossfader crossfader-horizontal" id="crossfader" min="0" max="1" step="0.01" value="0">
+                  <div class="cf-track-line cf-track-line-horizontal"></div>
+                </div>
+              </div>
+              <div class="cf-deck-pill cf-pill-inline" id="cfIndB">B</div>
+            </div>
+            <button class="auto-crossfade-btn" id="crossfadeBtn" type="button" title="Auto fade between deck A and deck B">
+              <span class="auto-crossfade-icon" aria-hidden="true">⇄</span>
+              <span class="auto-crossfade-label">AUTO FADE</span>
+            </button>
+            <span class="cf-timer-inline" id="cfTimerInline" aria-live="polite"></span>
+            <span id="cfTimer" hidden></span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="panel panel-jingle-deck" id="jingleDeckPanel">
+        <div class="panel-head">
+          <h2>Jingle Deck</h2>
+          <div class="jd-status-badge" id="jdStatusBadge">IDLE</div>
+        </div>
+        <div class="jd-body">
+
+          <div class="jd-selectors">
+            <div class="jd-select-group">
+              <label class="jd-label">Overlay jingle <span class="jd-select-hint">for launch</span></label>
+              <select id="jdOverlaySelect" class="jd-select">
+                <option value="">— none —</option>
+              </select>
+            </div>
+            <div class="jd-select-group">
+              <label class="jd-label">Separator jingle <span class="jd-select-hint">for launch</span></label>
+              <select id="jdSeparatorSelect" class="jd-select">
+                <option value="">— none —</option>
+              </select>
+            </div>
+            <div class="jd-select-group jd-vol-group">
+              <label class="jd-label">Launch vol <span id="jdVolVal">100%</span></label>
+              <input type="range" id="jdVolumeSlider" class="jd-vol-slider" min="0" max="1" step="0.05" value="1"
+                oninput="document.getElementById('jdVolVal').textContent=Math.round(this.value*100)+'%'">
+            </div>
+          </div>
+
+          <div class="jd-actions">
+            <button class="jd-btn jd-btn-overlay" id="jdBtnOverlay" onclick="jdPlayOverlay()" disabled>
+              <span class="jd-btn-icon">🎙</span>
+              <span class="jd-btn-label">Overlay Now</span>
+            </button>
+            <button class="jd-btn jd-btn-separator" id="jdBtnSeparator" onclick="jdPlaySeparator()" disabled>
+              <span class="jd-btn-icon">⏩</span>
+              <span class="jd-btn-label">Separator Now</span>
+            </button>
+            <button class="jd-btn jd-btn-queue" id="jdBtnQueue" onclick="jdQueueSeparator()" disabled>
+              <span class="jd-btn-icon">📌</span>
+              <span class="jd-btn-label">Queue Separator</span>
+            </button>
+            <button class="jd-btn jd-btn-stop" id="jdBtnStop" onclick="jdStop()" disabled>
+              <span class="jd-btn-icon">⏹</span>
+              <span class="jd-btn-label">Stop Active</span>
+            </button>
+            <button class="jd-btn jd-btn-clearqueue" id="jdBtnClearQueue" onclick="jdClearQueue()" disabled>
+              <span class="jd-btn-icon">✕</span>
+              <span class="jd-btn-label">Clear Queue</span>
+            </button>
+          </div>
+
+          <div class="jd-live" id="jdLive">
+            <div class="jd-live-info">
+              <span class="jd-live-label">Now:</span>
+              <span class="jd-live-file" id="jdLiveFile">—</span>
+              <span class="jd-mode-pill" id="jdModePill" style="display:none"></span>
+            </div>
+            <div class="jd-live-info">
+              <span class="jd-live-label">Status:</span>
+              <span class="jd-live-status" id="jdLiveStatus">idle</span>
+            </div>
+            <div class="jd-live-info" id="jdQueuedRow" style="display:none">
+              <span class="jd-live-label">Queued:</span>
+              <span class="jd-queued-name" id="jdQueuedName">—</span>
+              <span class="jd-mode-pill jd-mode-sep">SEP</span>
+            </div>
+            <div class="jd-counts">
+              <span class="jd-count-item">Overlay: <strong id="jdCountOverlay">0</strong></span>
+              <span class="jd-count-item">Separator: <strong id="jdCountSep">0</strong></span>
+            </div>
+            <div class="jd-monitor-note">
+              🔊 <strong>LOCAL MONITOR</strong> — jingle audibile qui nell'admin.
+              <span id="jdMonitorMutedHint" style="display:none"> · Song muted, jingle sempre attivo.</span>
+              I listener /listen lo ricevono indipendentemente via stream.
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="panel panel-ops">
+        <div class="panel-head"><h2>Operational status</h2><div class="muted" id="opsHeadline">Standard playout</div></div>
+        <div class="ops-hero-bar">
+          <div class="ops-hero-block ops-hero-health">
+            <div class="ops-hero-icon">⬤</div>
+            <div class="ops-hero-content">
+              <span class="ops-hero-pill ops-state-pill idle" id="opsHeroHealthPill">idle</span>
+              <span class="ops-hero-lbl">Health</span>
+            </div>
+          </div>
+          <div class="ops-hero-block ops-hero-listeners">
+            <div class="ops-hero-icon">👥</div>
+            <div class="ops-hero-content">
+              <span class="ops-hero-bignum" id="opsHeroListeners">0</span>
+              <span class="ops-hero-lbl">Listeners</span>
+            </div>
+          </div>
+          <div class="ops-hero-block">
+            <div class="ops-hero-icon">⚙</div>
+            <div class="ops-hero-content">
+              <span class="ops-hero-pill ops-state-pill idle" id="opsHeroRuntime">idle</span>
+              <span class="ops-hero-lbl">Runtime</span>
+            </div>
+          </div>
+          <div class="ops-hero-block">
+            <div class="ops-hero-icon">⛓</div>
+            <div class="ops-hero-content">
+              <span class="ops-hero-pill ops-state-pill idle" id="opsHeroAuthority">idle</span>
+              <span class="ops-hero-lbl">Authority</span>
+            </div>
+          </div>
+          <div class="ops-hero-block">
+            <div class="ops-hero-icon">↻</div>
+            <div class="ops-hero-content">
+              <span class="ops-hero-pill ops-state-pill idle" id="opsHeroSync">waiting</span>
+              <span class="ops-hero-lbl">Sync snapshot</span>
+            </div>
+          </div>
+          <div class="ops-hero-block">
+            <div class="ops-hero-icon">▣</div>
+            <div class="ops-hero-content">
+              <span class="ops-hero-pill ops-state-pill idle" id="opsHeroChild">offline</span>
+              <span class="ops-hero-lbl">Playout child</span>
+            </div>
+          </div>
+        </div>
+        <div class="ops-grid ops-grid-3">
+          <section class="ops-card">
+            <div class="ops-card-head"><span class="ops-card-ico">▶</span>Live / Transition</div>
+            <div id="transitionStatusBox" class="ops-card-body"></div>
+          </section>
+          <section class="ops-card">
+            <div class="ops-card-head"><span class="ops-card-ico">⚡</span>Playback modifiers</div>
+            <div id="playbackModifiersBox" class="ops-card-body"></div>
+          </section>
+          <section class="ops-card">
+            <div class="ops-card-head"><span class="ops-card-ico">◉</span>Reservoir &amp; cache</div>
+            <div id="reservoirStateBox" class="ops-card-body"></div>
+          </section>
+          <section class="ops-card ops-card-wide ops-card-backend" id="opsBackendNotesCard" style="display:none">
+            <div class="ops-card-head"><span class="ops-card-ico">⚠</span>Backend notes</div>
+            <div id="backendHealthBox" class="ops-card-body"></div>
+          </section>
+          <section class="ops-card ops-card-wide">
+            <div class="ops-card-head"><span class="ops-card-ico">≡</span>Event log</div>
+            <div id="opsEventLogBox" class="ops-log-box"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="panel panel-reservoir">
+        <div class="panel-head"><h2>Reservoir</h2><div class="muted" id="reservoirHeadline">No prepared tracks yet</div></div>
+        <div id="reservoirList" class="track-stack"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Recently played</h2><div class="muted">Latest completed or skipped</div></div>
+        <ul id="history"></ul>
+      </div>
+
+      <div class="panel">
+        <div class="footer-grid footer-grid-six">
+          <div class="footer-box footer-box-generated">
+            <div class="footer-stat-line"><span class="footer-stat-name">Prepared:</span><span class="footer-stat-number" id="songsPrepared">0 / 0</span></div>
+            <div class="footer-stat-line"><span class="footer-stat-name">Total gen.:</span><span class="footer-stat-number" id="songsGeneratedTotal">0</span></div>
+            <div class="footer-stat-line"><span class="footer-stat-name">This run:</span><span class="footer-stat-number" id="songsGeneratedRun">0</span></div>
+          </div>
+          <div class="footer-box"><div class="footer-label">GPU</div><div class="footer-value" id="gpuName">-</div></div>
+          <div class="footer-box"><div class="footer-label">VRAM</div><div class="footer-value" id="gpuVram">-</div></div>
+          <div class="footer-box"><div class="footer-label">TEMPERATURE</div><div class="footer-value" id="gpuTemp">-</div></div>
+          <div class="footer-box"><div class="footer-label">POWER</div><div class="footer-value" id="gpuPower">-</div></div>
+          <div class="footer-box"><div class="footer-label">YOUR IP</div><div class="footer-value" id="clientIp">-</div><div class="footer-substats"><div><span class="footer-sub-label">Votes:</span> <span id="adminVoteScope">1 per browser</span></div></div></div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+</div>
+<script src="/static/i18n.js"></script><script src="/static/app.js?v=60"></script>
+</body></html>
