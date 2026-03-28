@@ -1,26 +1,9 @@
-"""
-AceRadio v1.0
-Built on top of Ace-Step v1.5
-
-Copyright (C) 2026 Marco Robustini [Marcopter]
-
-This file is part of AceRadio.
-AceRadio is licensed under the GNU General Public License v3.0 or later.
-
-You may redistribute and/or modify this software under the terms
-of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or any later version.
-
-AceRadio is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-See the GNU General Public License for more details.
-"""
 
 from __future__ import annotations
 import ast
 import asyncio
 import functools
+import inspect
 import json
 import logging
 import os
@@ -1050,6 +1033,38 @@ def _get_turbo_timesteps_for_infer_steps(infer_steps: int) -> List[float]:
     steps = max(1, min(int(infer_steps), RUNTIME_DEFAULT_MAX_INFERENCE_STEPS_TURBO))
     return RUNTIME_TURBO_VALID_TIMESTEPS[:steps]
 
+def _get_callable_signature(fn):
+
+    try:
+        return inspect.signature(fn)
+    except (TypeError, ValueError):
+        return None
+
+def _bind_call_arguments(fn, self_obj, args, kwargs):
+
+    signature = _get_callable_signature(fn)
+    if signature is None:
+        return None
+    try:
+        bound = signature.bind_partial(self_obj, *args, **kwargs)
+    except TypeError:
+        return None
+    try:
+        bound.apply_defaults()
+    except Exception:
+        pass
+    return bound.arguments
+
+def _get_bound_argument(fn, self_obj, args, kwargs, *names, default=None):
+
+    bound_arguments = _bind_call_arguments(fn, self_obj, args, kwargs)
+    if not bound_arguments:
+        return default
+    for name in names:
+        if name in bound_arguments:
+            return bound_arguments[name]
+    return default
+
 def _install_core_turbo_step_clamp_bypass_patch() -> bool:
 
     if not _is_core_turbo_step_clamp_bypass_enabled():
@@ -1062,11 +1077,33 @@ def _install_core_turbo_step_clamp_bypass_patch() -> bool:
         logger.warning("[AceRadio] could not import core turbo clamp target; bypass disabled err={!r}", exc)
         return False
 
+    normalize_target = getattr(ServiceGenerateRequestMixin, "_normalize_service_generate_inputs", None)
+    build_kwargs_target = getattr(ServiceGenerateExecuteMixin, "_build_service_generate_kwargs", None)
+    if not callable(normalize_target) or not callable(build_kwargs_target):
+        logger.warning("[AceRadio] core turbo clamp target methods not found; bypass disabled")
+        return False
+
+    normalize_signature = _get_callable_signature(normalize_target)
+    build_kwargs_signature = _get_callable_signature(build_kwargs_target)
+    if normalize_signature is None or build_kwargs_signature is None:
+        logger.warning("[AceRadio] core turbo clamp target signatures unavailable; bypass disabled")
+        return False
+
+    normalize_parameters = normalize_signature.parameters
+    build_kwargs_parameters = build_kwargs_signature.parameters
+    if "infer_steps" not in normalize_parameters or "infer_steps" not in build_kwargs_parameters or "timesteps" not in build_kwargs_parameters:
+        logger.warning(
+            "[AceRadio] core turbo clamp target signatures changed normalize_params={} build_kwargs_params={}; runtime patch will stay inactive",
+            list(normalize_parameters.keys()),
+            list(build_kwargs_parameters.keys()),
+        )
+        return False
+
     if getattr(ServiceGenerateRequestMixin, "_aceradio_turbo_clamp_patch_installed", False) and getattr(ServiceGenerateExecuteMixin, "_aceradio_turbo_timestep_patch_installed", False):
         return True
 
-    original_normalize = ServiceGenerateRequestMixin._normalize_service_generate_inputs
-    original_build_kwargs = ServiceGenerateExecuteMixin._build_service_generate_kwargs
+    original_normalize = normalize_target
+    original_build_kwargs = build_kwargs_target
 
     class _ConfigProxy:
         def __init__(self, config):
@@ -1087,12 +1124,11 @@ def _install_core_turbo_step_clamp_bypass_patch() -> bool:
         def __getattr__(self, name):
             return getattr(self._host, name)
 
+    @functools.wraps(original_normalize)
     def patched_normalize(self, *args, **kwargs):
-        infer_steps = kwargs.get("infer_steps", None)
-        if infer_steps is None and len(args) >= 10:
-            infer_steps = args[9]
         if not getattr(getattr(self, "config", None), "is_turbo", False):
             return original_normalize(self, *args, **kwargs)
+        infer_steps = _get_bound_argument(original_normalize, self, args, kwargs, "infer_steps")
         try:
             infer_steps_int = int(infer_steps)
         except Exception:
@@ -1105,57 +1141,32 @@ def _install_core_turbo_step_clamp_bypass_patch() -> bool:
         )
         return original_normalize(_HostProxy(self), *args, **kwargs)
 
-    def patched_build_kwargs(
-        self,
-        payload,
-        seed_param,
-        infer_steps,
-        guidance_scale,
-        audio_cover_strength,
-        cover_noise_strength,
-        infer_method,
-        use_adg,
-        cfg_interval_start,
-        cfg_interval_end,
-        shift,
-        timesteps,
-    ):
-        kwargs = original_build_kwargs(
-            self=self,
-            payload=payload,
-            seed_param=seed_param,
-            infer_steps=infer_steps,
-            guidance_scale=guidance_scale,
-            audio_cover_strength=audio_cover_strength,
-            cover_noise_strength=cover_noise_strength,
-            infer_method=infer_method,
-            use_adg=use_adg,
-            cfg_interval_start=cfg_interval_start,
-            cfg_interval_end=cfg_interval_end,
-            shift=shift,
-            timesteps=timesteps,
-        )
-        if timesteps is not None:
-            return kwargs
+    @functools.wraps(original_build_kwargs)
+    def patched_build_kwargs(self, *args, **kwargs):
+        build_kwargs = original_build_kwargs(self, *args, **kwargs)
         if not getattr(getattr(self, "config", None), "is_turbo", False):
-            return kwargs
+            return build_kwargs
+        timesteps = _get_bound_argument(original_build_kwargs, self, args, kwargs, "timesteps", default=build_kwargs.get("timesteps"))
+        if timesteps is not None:
+            return build_kwargs
+        infer_steps = _get_bound_argument(original_build_kwargs, self, args, kwargs, "infer_steps", default=build_kwargs.get("infer_steps"))
         try:
             infer_steps_int = int(infer_steps)
         except Exception:
-            return kwargs
+            return build_kwargs
         if infer_steps_int <= 8:
-            return kwargs
+            return build_kwargs
         effective_steps = max(1, min(infer_steps_int, RUNTIME_DEFAULT_MAX_INFERENCE_STEPS_TURBO))
         schedule = _get_turbo_timesteps_for_infer_steps(effective_steps)
-        kwargs["timesteps"] = torch.tensor(schedule, dtype=torch.float32, device=self.device)
-        kwargs["infer_steps"] = effective_steps
+        build_kwargs["timesteps"] = torch.tensor(schedule, dtype=torch.float32, device=self.device)
+        build_kwargs["infer_steps"] = effective_steps
         logger.warning(
             "[AceRadio] turbo runtime patch mapped requested infer_steps={} to explicit timesteps schedule len={} values={}",
             infer_steps_int,
             len(schedule),
             schedule,
         )
-        return kwargs
+        return build_kwargs
 
     ServiceGenerateRequestMixin._normalize_service_generate_inputs = patched_normalize
     ServiceGenerateRequestMixin._aceradio_turbo_clamp_patch_installed = True
@@ -3254,15 +3265,15 @@ def create_app() -> FastAPI:
         keyscale = str(req.get("keyscale") or "").strip()
         timesignature = str(req.get("timesignature") or "").strip()
         return f"""<|im_start|>system
-# Instruction
+Instruction:
 Generate audio semantic tokens based on the given conditions:
 
 <|im_end|>
 <|im_start|>user
-# Caption
+Caption:
 {caption}
 
-# Lyric
+Lyric:
 {lyrics}
 <|im_end|>
 <|im_start|>assistant
