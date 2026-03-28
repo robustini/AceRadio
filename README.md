@@ -5,30 +5,32 @@ An AI-first web radio built on top of **[ACE-Step V1.5](https://github.com/ace-s
 
 <img
   src="https://github.com/robustini/AceRadio/blob/main/docs/images/aceradio_01.png"
-  alt="AceRadio main dashboard"
-  title="AceRadio main dashboard"
+  alt="AceRadio admin dashboard"
+  title="AceRadio admin dashboard"
   style="display: inline-block; margin: 0 auto; max-width: 200px">
 
 AceRadio does **not** replace ACE-Step and does **not** reimplement the generation engine.  
 It is a radio orchestration layer built on top of the ACE-Step runtime: the UI defines the station, the backend prepares tracks, the playout logic keeps the broadcast moving, and ACE-Step generates the actual music.
 
-AceRadio is designed for a different workflow than a classic one-shot generation page.  
+AceRadio is built for a different workflow than a classic one-shot generation page.  
 Instead of preparing a single song manually every time, you define a **station identity** and let the system keep building and rotating music around it.
 
 What AceRadio can do in practice:
 
 - continuously generate songs with **ACE-Step**
 - use **Ollama** to prepare titles, descriptions, style direction, BPM, duration, key/scale, vocal language, and lyrics
-- offload and reload the music runtime around the **Ollama** prompt stage to reduce peak VRAM pressure during LM-assisted station planning
+- offload and reload the music runtime around the **Ollama** stage to reduce unnecessary peak VRAM overlap
+- work without the Ollama writing stage when you want to rely on internal catalogs, custom catalogs, or already generated tracks on disk
 - maintain a **prepared reservoir** of upcoming tracks instead of generating only at the last second
 - switch between **AI generated**, **Local catalog**, and **Hybrid** station modes
-- work without Ollama-driven prompt writing when you want to rely on local song sources instead
 - reuse songs already present in `aceradio_outputs`
 - keep both a rolling generated-song history and dated daily generated-song files for AI-created tracks
 - work with **LoRAs** from a catalog and from the ACE-Step `lora` folder
 - expose a separate **admin page** and **listener page**
-- manage **deck A / deck B**, monitor playback, and auto transitions
-- let listeners **vote** and **download** tracks
+- run as a largely **automatic radio** once started: current track, next track, reservoir refill, transitions, and optional jingle/separator logic are supervised in the background
+- provide a **dual-deck admin view** with local prelisten, deck download, waveform display, speed control, and crossfader / auto-fade controls
+- let listeners switch between **live listening** and a **free player / browsing** mode
+- let listeners vote, browse, seek inside a track from the waveform, and download songs
 - publish the radio to external servers via **Icecast, Shoutcast, RTMP, or SRT**
 - save and reload station settings from JSON files
 
@@ -36,7 +38,6 @@ In plain English:
 
 - **ACE-Step is the engine**
 - **AceRadio is the radio station layer**
-
 
 ---
 
@@ -46,7 +47,7 @@ AceRadio is meant to be installed **from inside the root of your ACE-Step reposi
 
 So before running the installer command, make sure your shell is already inside your local **ACE-Step V1.5** folder.
 
-The installer will then download the required AceRadio files automatically from this repository and place them into the correct location inside your ACE-Step tree.
+The installer then downloads the required AceRadio files automatically from this repository and places them in the correct location inside your ACE-Step tree.
 
 It is expected to copy only the AceRadio payload needed by the integration, not the whole repository.  
 In particular, it should **not** overwrite the main `README.md` already present in your ACE-Step root.
@@ -114,7 +115,6 @@ acestep/ui/aceradio/README.md
 
 That way, ACE-Step keeps its own root README untouched, while AceRadio can still ship its own documentation in its own folder.
 
-
 ---
 
 ## Launchers and runtime setup
@@ -144,7 +144,7 @@ http://0.0.0.0:7862/listen
 
 ### What the launcher configures
 
-AceRadio does not hide all runtime choices inside the web UI.  
+AceRadio does not expose every runtime choice in the web UI.  
 Some important decisions are made before the browser opens, directly in the launcher.
 
 The launchers set or expose values such as:
@@ -187,8 +187,8 @@ For normal use and redistribution, prefer:
 AceRadio includes a specific VRAM-saving behavior for the **Ollama-assisted** workflow.
 
 When the station is using the AI-written song path, AceRadio does **not** keep the music runtime and the Ollama prompt stage stacked together unnecessarily.  
-Before asking Ollama for the next structured song package, it explicitly asks the ACE-Step side to **offload the music runtime**.  
-Once the Ollama step is finished, AceRadio asks the music runtime to **load back in** before the actual audio generation starts.
+Before asking Ollama for the next structured song package, AceRadio explicitly asks the ACE-Step side to **offload the music runtime**.  
+Once the Ollama step is finished, it asks the music runtime to **load back in** before audio generation starts.
 
 In other words:
 
@@ -199,7 +199,7 @@ In other words:
 5. AceRadio reloads the music runtime
 6. ACE-Step generates the audio
 
-This matters because it reduces unnecessary peak VRAM overlap between the LM-assisted planning phase and the music-generation phase.
+This reduces unnecessary peak VRAM overlap between the LM-assisted planning phase and the music-generation phase.
 
 ### When this behavior applies
 
@@ -211,7 +211,7 @@ If you work with local sources instead, AceRadio can avoid that Ollama prompt-wr
 - **Hybrid** mixes local material and AI-written prompts
 - cached / already generated material on disk can also be reused by the radio
 
-So if your goal is to minimize extra VRAM pressure as much as possible, the lightest path is to avoid the Ollama writing stage and rely on local sources or cached material whenever that fits your station design.
+So if your goal is to minimize VRAM pressure as much as possible, the lightest path is to avoid the Ollama writing stage and rely on local sources or cached material whenever that fits your station design.
 
 ### VRAM cleanup modes
 
@@ -222,6 +222,7 @@ AceRadio also exposes a **VRAM cleanup mode** in the UI/runtime settings:
 - **aggressive** → stronger cleanup, including synchronization
 
 That cleanup is used after heavy stages complete, and the Ollama unload path also triggers an aggressive cleanup pass.
+
 ---
 
 ## ✨ What AceRadio Is For
@@ -229,7 +230,7 @@ That cleanup is used after heavy stages complete, and the Ollama unload path als
 AceRadio exists to make **continuous AI radio playback** practical from a browser.
 
 It is not just a prompt form on top of ACE-Step.  
-It combines station identity, generation planning, playout, catalog fallback, listener playback, and streaming into one interface.
+It combines station identity, generation planning, playout, catalog fallback, listener playback, and streaming in a single interface.
 
 The station can be driven by:
 
@@ -247,7 +248,6 @@ That makes AceRadio useful for:
 - hybrid radio setups mixing generated tracks and local JSON catalogs
 - private or public live streams backed by ACE-Step
 
-
 ---
 
 ## 🧭 How the Radio Works
@@ -256,52 +256,73 @@ The high-level flow is:
 
 1. You define the station identity and runtime settings
 2. AceRadio prepares the next editorial target for the station
-3. if the station is using the AI-written path, **Ollama** generates a structured song package
-4. if the station is using local sources, AceRadio pulls the next song prompt from its local catalog data instead
+3. If the station is using the AI-written path, **Ollama** generates a structured song package
+4. If the station is using local sources, AceRadio pulls the next prompt from its bundled or generated catalog data instead
 5. **ACE-Step** generates the audio when a new track must be rendered
 6. AceRadio writes metadata and stores the result in `aceradio_outputs`
 7. The track enters the radio rotation
-8. the playout engine keeps current, next, and reservoir tracks moving
-9. admin and listener pages poll status and stay synchronized
+8. The supervisor keeps current, next, and reservoir tracks moving
+9. Admin and listener pages poll status and stay synchronized
 
 This is why AceRadio behaves more like a small automated station than a classic “generate one file now” interface.
 
+### Fully automatic radio behavior after start
+
+Once the radio is started, AceRadio is designed to keep going on its own.
+
+The backend supervisor handles things such as:
+
+- promoting the next prepared track into the on-air slot
+- keeping a reservoir of prepared tracks ready
+- triggering refill when the prepared queue drops below threshold
+- reusing cached tracks already found in `aceradio_outputs`
+- applying automatic transition logic
+- arming and firing optional separators / overlays when that part is configured
+
+In other words, the admin page is the control room, but the radio itself is meant to keep running automatically after launch instead of requiring constant manual intervention.
+
 ### Admin page and listener page
 
-AceRadio has two distinct pages:
+AceRadio has two distinct pages.
 
 #### Admin page: `/`
+![AceRadio listener page](https://github.com/robustini/AceRadio/blob/main/docs/images/aceradio_02.png "AceRadio listener page")
+
 The control room for the station.
 
 This is where you manage:
 
-- station direction
-- genres, themes, and languages
-- generation mode and catalog source
-- DiT model and generation values
-- LoRAs
-- reservoir and cache behavior
-- deck A / deck B playback state
-- monitor playback and local mute
+- station direction and negative direction
+- active genres, themes, and vocal languages
+- language rotation mode
+- generation mode, catalog source, and hybrid file percentage
+- custom JSON catalog override
+- DiT model and audio-generation values
+- LM / Ollama planning controls
+- LoRAs and LoRA use probability
+- reservoir, cache, VRAM cleanup, and storage limits
 - live streaming
-- settings save/load
+- optional jingles / separators
+- dual-deck playback, local prelisten, auto-fade, and speed controls
+- settings save/load and storage maintenance
 
 #### Listener page: `/listen`
-![AceRadio listener page](https://github.com/robustini/AceRadio/blob/main/docs/images/aceradio_02.png "AceRadio listener page")
+![AceRadio listener page](https://github.com/robustini/AceRadio/blob/main/docs/images/aceradio_03.png "AceRadio listener page")
 
 The public-facing player page.
 
-This page is designed for listeners and includes:
+It is not limited to a passive live stream view.
 
-- now playing
-- next track
-- player state aligned with the radio
-- track voting
-- track download
-- listener count
+In normal live mode it follows the current broadcast state, but it can also switch into a **free player / browsing mode** where listeners can:
 
+- move between tracks with the side arrows near the transport controls
+- browse the available track list more freely
+- click the waveform to jump to a specific point in the song
+- use the seek bar directly
+- download the selected track
+- vote for the current track
+- return to the live stream state when they want to reattach to the real broadcast
 
----
 
 ## 🧠 Ollama and ACE-Step integration
 
@@ -346,13 +367,15 @@ AceRadio exposes three main station modes:
 
 This is the fully AI-driven path.
 
-AceRadio prepares the next song with Ollama and then generates it through ACE-Step.
+AceRadio asks Ollama to prepare the next structured song package and then sends that material to ACE-Step for audio generation.
+
+This is the richest mode from an editorial point of view, but it is also the mode where the Ollama-side planning step is actually used.
 
 ### Local catalog
 
 Instead of asking Ollama to invent each next song package, AceRadio can pull the next prompt from local JSON song catalogs.
 
-This still keeps the station inside the AceRadio / ACE-Step workflow, but it avoids the Ollama writing stage.
+This still keeps the station inside the AceRadio / ACE-Step workflow, but it avoids the Ollama writing stage and is therefore the lightest path from a VRAM point of view.
 
 ### Hybrid
 
@@ -367,9 +390,9 @@ When Hybrid is active, **File chance %** controls how often the next track shoul
 
 When local material is involved, the UI exposes these catalog sources:
 
-- **Library**
-- **AI catalog**
-- **All local**
+- **Library** → the bundled `songs.json`
+- **AI catalog** → the generated-song history built in `aceradio_outputs`
+- **All local** → combined local pool
 
 There is also an exclusive custom catalog workflow described below.
 
@@ -432,7 +455,7 @@ This is why the generated history can be reused later as a local catalog source 
 
 When songs are cleared from the outputs area, AceRadio also removes the dated daily generated-song files (`songs.generated_YYMMDD.json`).
 
-The rolling `songs.generated.json` file is the long-lived history file, while the dated daily files are treated as disposable per-day generated snapshots.
+So the per-day generated snapshots are cleaned together with the song folders, while the rolling `songs.generated.json` file remains the longer-lived generated catalog.
 
 ### Exclusive custom catalog
 
@@ -450,7 +473,7 @@ The active custom catalog is stored as:
 aceradio_outputs/catalogs/custom_catalog.json
 ```
 
-Invalid or unusable entries are normalized or ignored, so AceRadio treats this as a curated song source rather than blindly trusting the file.
+Invalid or unusable entries are normalized or ignored, so AceRadio treats this as a curated song source rather than blindly trusting the file contents.
 
 ---
 
@@ -483,7 +506,7 @@ unless `ACESTEP_REMOTE_LORA_ROOT` is overridden.
 
 ### Practical behavior
 
-AceRadio is not using LoRAs as a decorative label only.
+AceRadio does not use LoRAs as a decorative label only.
 
 The radio can:
 
@@ -498,29 +521,141 @@ That makes LoRAs part of the station identity, not just a manual one-off overrid
 
 ## 🎚️ Station controls and generation values
 
-The main station area lets you define the overall radio direction.
+The admin page is more than a simple prompt form.  
+It is where you define both the **editorial identity** of the station and the **technical behavior** of the radio.
 
-Visible controls in the UI include:
+### Station identity and catalog behavior
 
-- **Station direction**
-- **Negative direction**
-- genres
-- themes
-- vocal languages
-- language rotation mode
-- min / max duration
-- automatic duration
-- instrumental probability
-- DiT model
-- inference steps
-- guidance / shift / CFG-related values
-- playback modifiers
-- reservoir target and refill threshold
-- maximum saved tracks
+The station section lets you configure:
 
-This keeps AceRadio usable both as a radio station and as a more controlled ACE-Step frontend for long-running sessions.
+- **Station direction** → the main creative brief sent to the LM side
+- **Negative direction** → what the station should avoid
+- active **genres**
+- active **themes**
+- available **vocal languages**
+- **language rotation mode** (`round_robin` or `random`)
+- **Generation Mode** (`AI generated`, `Local catalog`, `Hybrid`)
+- **Catalog Source** when local catalog access is enabled
+- **File chance %** for Hybrid mode
+- **Exclusive custom catalog** override loaded from a JSON file
+- **Instrumental %**
+- **Min / Max duration**
+- **Automatic duration**
+- **LoRA use %**
+- **Auto transition cut (s)**
 
----
+### Model and audio-generation controls
+
+The model section exposes the main ACE-Step generation values, including:
+
+- **DiT model**
+- **Use ADG**
+- **Inference steps**
+- **Inference method**
+- **Guidance scale**
+- **Shift**
+- **CFG interval start / end**
+- **Normalization target dB**
+- **Quality score sensitivity**
+- **Latent shift**
+- **Latent rescale**
+- **timesteps override**
+- **output audio format**
+- **MP3 bitrate / sample rate** when MP3 is selected
+
+### LM / Ollama controls
+
+AceRadio also exposes a dedicated LM section for the Ollama-side planning phase, including:
+
+- **Enable LM planning**
+- **Constrained decoding**
+- **CoT metas**
+- **Caption rewrite**
+- **CoT language**
+- **Parallel thinking**
+- **Constrained decoding debug**
+- **LM temperature**
+- **LM CFG scale**
+- **LM top-K**
+- **LM top-P**
+- **LM negative prompt**
+
+These values matter only for the LM-assisted planning side.  
+If you run AceRadio from local catalogs or cached material instead, that path is reduced or skipped entirely.
+
+### Runtime, storage, and maintenance
+
+The runtime section includes:
+
+- **VRAM cleanup mode**
+- **Reservoir target**
+- **Refill threshold**
+- **Keep on disk**
+- cache status
+- **Rebuild cache**
+
+The storage/config area also includes:
+
+- **Save**
+- **Save as**
+- **Browse** another settings file
+- saved-track counters
+- cache-on-disk counters
+- **Clear cache**
+- **Clear all songs**
+- admin/runtime error log view and clear action
+
+### Streaming controls
+
+The Live Streaming section lets you configure:
+
+- protocol
+- server template / preset
+- host
+- port
+- mountpoint
+- username / password
+- bitrate
+- stream format
+- station name / description / genre
+- public/private flag
+- stream validation
+- stream error log
+
+### Jingle controls
+
+When jingles / separators are part of the setup, the admin side also exposes:
+
+- overlay / separator quick launch
+- jingle rescan
+- per-jingle enable state
+- `every_n_songs`
+- per-jingle volume
+- separator timing before end
+- overlay midpoint timing
+- fade / duck / restore timing
+- queue separator
+- stop active jingle
+- jingle live status and counters
+
+### Dual-deck admin transport
+
+The admin page is also a real deck interface, with:
+
+- **Deck A** for the current track
+- **Deck B** for the next / cued track
+- per-deck waveform
+- deck download
+- deck play / pause for local preview
+- lyrics panes
+- playback speed control
+- local prelisten mute
+- prelisten master level
+- crossfader
+- auto-fade
+
+That is why AceRadio feels closer to a compact radio playout console than to a minimal song-generation page.
+
 
 ## 🔄 Reservoir, cache, and playout
 
@@ -535,14 +670,30 @@ In practice, the runtime tracks:
 - a background reservoir of prepared tracks
 - a cache pool of reusable material already on disk
 
+### What happens after the radio starts
+
+After startup, AceRadio supervises the rotation continuously.
+
+It can:
+
+- scan `aceradio_outputs` for reusable cached tracks
+- promote a prepared track into the **next** slot
+- promote the next track into the **current / on-air** slot
+- refill the reservoir when the prepared count falls below the configured threshold
+- reject or recycle recently seen tracks when needed
+- keep recently played history for safer rotation behavior
+
 ### Deck-based control
 
 The admin page also exposes a deck-style layout:
 
 - **Deck A** for the current track
 - **Deck B** for the cued / next track
-- local monitor controls
-- auto transition / crossfade style controls
+- local preview transport
+- local-only mute
+- prelisten master level
+- playback speed
+- crossfader and auto-fade behavior
 
 This is one of the main reasons AceRadio feels like a playout interface rather than a plain generation panel.
 
@@ -552,7 +703,19 @@ AceRadio can rescan `aceradio_outputs` and reuse existing tracks as local radio 
 
 The UI includes cache-oriented tools and status blocks, so previously generated tracks can be brought back into circulation after a restart.
 
----
+### Automatic transitions
+
+AceRadio is not limited to “wait until the file ends and then do something”.
+
+The runtime keeps track of playback elapsed time and can apply:
+
+- normal end-of-track rotation
+- optional **Auto transition cut**
+- separator arming near the transition window
+- auto-fade / deck-based handoff behavior on the playback side
+
+So once the station is running, track-to-track movement is meant to be automatic, while still leaving manual controls available in the admin UI.
+
 
 ## 🔊 Live streaming
 
@@ -596,28 +759,102 @@ Streaming depends on **ffmpeg** being available in the system `PATH`.
 
 If `ffmpeg` is missing, stream validation and start-up will fail.
 
-
 ---
+
+
+## 🎙️ Jingles and separators
+
+AceRadio supports optional **overlay** and **separator** jingles.
+
+The expected folders on disk are:
+
+```text
+aceradio_jingles/
+├─ overlay/
+└─ separator/
+```
+
+and the main configuration file is:
+
+```text
+aceradio_jingles/jingles.json
+```
+
+### What the jingle system can do
+
+When jingles are configured, AceRadio can:
+
+- rescan the jingle folders
+- keep separate **overlay** and **separator** pools
+- enable or disable individual jingles
+- use per-jingle `every_n_songs`
+- use per-jingle volume
+- queue a separator manually
+- trigger an overlay or separator manually from the admin page
+- automatically arm and fire separators around transitions
+- automatically trigger eligible overlays during the body of a track when timing rules match
+
+### Manual and automatic behavior
+
+The admin UI exposes both quick-launch controls and timing controls, but the radio is also able to use this system automatically once it is running.
+
+So jingles are not just a manual button effect.  
+If you configure them, they can become part of the normal radio automation.
+
 
 ## 👥 Listener interaction
 
 The listener side is not passive only.
 
-### Listener count
+It can behave both as a **live listener page** and as a **free player / browsing interface**.
 
-AceRadio tracks active listeners through ping calls and exposes a live count.
+### Live mode
+
+In live mode, the page stays attached to the actual radio state and follows the current broadcast.
+
+That includes:
+
+- live current track
+- live next track
+- listener count
+- vote state
+- transport state aligned with the radio
+
+### Free player / browsing mode
+
+The listener page can leave the pure streaming state and switch into a browsing mode.
+
+From there, users can:
+
+- move backward and forward across tracks with the side arrows near the transport controls
+- browse a wider local track list instead of staying locked to the live progression
+- click directly on the waveform to jump to a specific point
+- use the seek bar for precise seeking
+- pause locally without changing the actual radio state
+- return to live mode when they want to reattach to the real broadcast
+
+### Waveform, seeking, and download
+
+The listener UI is not limited to a basic HTML audio bar.
+
+It includes:
+
+- waveform rendering
+- waveform progress display
+- click-to-seek on the waveform
+- seek bar control
+- track download
 
 ### Voting
 
 Listeners can vote for the current song.
 
-The implementation uses a listener cookie scope and persists vote information into track metadata, so voting is not lost on a simple refresh.
+The implementation uses browser-local vote tracking and also persists the vote information into track metadata, so the vote state is not lost on a simple refresh.
 
-### Download
+### Listener count
 
-Tracks exposed by the current radio state can also be downloaded from the UI.
+AceRadio tracks active listeners through ping calls and exposes a live count.
 
----
 
 ## 🔐 Optional authentication
 
@@ -740,7 +977,7 @@ If the UI opens correctly but the station does not actually produce tracks, the 
 
 Also note:
 
-- the listener page is a real part of the product, not a duplicate of the admin page
+- the listener page is a real part of the product, not a duplicate of the admin page; it has both live and free-player browsing behavior
 - local catalogs, generated history, and cache reuse are all first-class parts of the AceRadio workflow
 - the Ollama-specific load / offload optimization applies to the AI-written prompt stage, not to every station mode equally
 - if you want the leanest runtime behavior, prefer local sources and cached material instead of always going through the Ollama writing step
@@ -764,5 +1001,5 @@ If you want to contribute to AceRadio, feel free to open a **Pull Request**.
 
 If you find a bug, a regression, or something unclear in the current behavior, please open an **Issue** and describe the problem as clearly as possible, including steps to reproduce it when relevant.
 
-Suggestions, fixes, cleanup, and practical improvements are all welcome.
+Suggestions, fixes, cleanup, and practical improvements are welcome.
 
