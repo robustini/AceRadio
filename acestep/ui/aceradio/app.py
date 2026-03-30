@@ -1280,6 +1280,26 @@ def _normalize_radio_request(payload: 'RadioStartRequest') -> 'RadioStartRequest
     payload.vram_cleanup_mode = (payload.vram_cleanup_mode or VRAM_CLEANUP_MODE).strip().lower() or VRAM_CLEANUP_MODE
     payload.max_saved_tracks = max(1, min(10000, int(payload.max_saved_tracks or DEFAULT_MAX_SAVED_TRACKS)))
     payload.lora_use_probability = max(0, min(100, int(payload.lora_use_probability or 0)))
+    normalized_selected_loras: list[SelectedLoRA] = []
+    seen_selected_loras: set[str] = set()
+    for item in list(getattr(payload, 'selected_loras', []) or []):
+        if not isinstance(item, SelectedLoRA):
+            try:
+                item = SelectedLoRA.model_validate(item)
+            except Exception:
+                continue
+        lora_id = str(getattr(item, 'id', '') or '').strip()
+        if not lora_id or lora_id in seen_selected_loras:
+            continue
+        item.id = lora_id
+        item.enabled = bool(getattr(item, 'enabled', True))
+        item.weight = item.normalized_main_weight()
+        item.weight_self_attn = item.normalized_optional_weight(getattr(item, 'weight_self_attn', None))
+        item.weight_cross_attn = item.normalized_optional_weight(getattr(item, 'weight_cross_attn', None))
+        item.weight_ffn = item.normalized_optional_weight(getattr(item, 'weight_ffn', None))
+        normalized_selected_loras.append(item)
+        seen_selected_loras.add(lora_id)
+    payload.selected_loras = normalized_selected_loras
     payload.generation_mode, payload.catalog_source, payload.generation_source = _resolve_generation_settings(
         getattr(payload, 'generation_mode', None),
         getattr(payload, 'catalog_source', None),
@@ -1893,10 +1913,58 @@ class SongPrompt(BaseModel):
     def tags(self)->str:
         return ', '.join(filter(None,[self.genre or self.style,self.theme]))
 
+
+def _parse_lora_weight_value(value: Any, default: float = 0.6) -> float | None:
+    if isinstance(value, (int, float)):
+        try:
+            n = float(value)
+        except Exception:
+            return default
+    else:
+        raw = str(value or '').strip()
+        if not raw:
+            return default
+        raw = re.sub(r"[\s  ]+", "", raw)
+        raw = re.sub(r"[^0-9,\.\-\+]", "", raw)
+        if not raw or raw in {'-', '+', '.', ',', '-.', '-,', '+.', '+,'}:
+            return default
+        last_comma = raw.rfind(',')
+        last_dot = raw.rfind('.')
+        if last_comma >= 0 and last_dot >= 0:
+            if last_comma > last_dot:
+                raw = raw.replace('.', '').replace(',', '.')
+            else:
+                raw = raw.replace(',', '')
+        elif last_comma >= 0:
+            raw = raw.replace('.', '').replace(',', '.')
+        try:
+            n = float(raw)
+        except Exception:
+            return default
+    if n != n:
+        return default
+    return max(0.0, min(n, 2.0))
+
 class SelectedLoRA(BaseModel):
     id:str
     weight:float=0.6
     enabled:bool=True
+    weight_self_attn:float|None=None
+    weight_cross_attn:float|None=None
+    weight_ffn:float|None=None
+
+    def normalized_main_weight(self) -> float:
+        return _parse_lora_weight_value(getattr(self, 'weight', 0.6), default=0.6) or 0.6
+
+    def normalized_optional_weight(self, value: Any) -> float | None:
+        return _parse_lora_weight_value(value, default=None)
+
+    def effective_layer_weights(self) -> tuple[float, float, float, float]:
+        main = self.normalized_main_weight()
+        self_attn = self.normalized_optional_weight(getattr(self, 'weight_self_attn', None))
+        cross_attn = self.normalized_optional_weight(getattr(self, 'weight_cross_attn', None))
+        ffn = self.normalized_optional_weight(getattr(self, 'weight_ffn', None))
+        return main, (main if self_attn is None else self_attn), (main if cross_attn is None else cross_attn), (main if ffn is None else ffn)
 
 class RadioStartRequest(BaseModel):
     genres:list[str]=Field(default_factory=list)
@@ -3137,7 +3205,7 @@ def _track_uses_custom_catalog(track: Optional[Track]) -> bool:
     return display_source == 'custom_catalog'
 
 
-def _build_track(prompt: SongPrompt, *, duration: int, language: str, instrumental: bool, source: str, job_id: str, audio_bytes: bytes, audio_mime: str, seed: str, lora_id: str, audio_path: str) -> Track:
+def _build_track(prompt: SongPrompt, *, duration: int, language: str, instrumental: bool, source: str, job_id: str, audio_bytes: bytes, audio_mime: str, seed: str, lora_id: str, lora_weight: float = 0.0, lora_weight_self_attn: float = 0.0, lora_weight_cross_attn: float = 0.0, lora_weight_ffn: float = 0.0, audio_path: str) -> Track:
     source = _normalize_track_source_key(source)
     prompt = _finalize_prompt(prompt, duration, language, instrumental, source)
     if source == 'file':
@@ -3159,7 +3227,7 @@ def _build_track(prompt: SongPrompt, *, duration: int, language: str, instrument
         audio_bytes=audio_bytes,
         audio_mime=audio_mime,
         seed=seed,
-        prompt={**prompt.model_dump(), 'source': source},
+        prompt={**prompt.model_dump(), 'source': source, 'lora_weight': float(lora_weight or 0.0), 'lora_weight_self_attn': float(lora_weight_self_attn or 0.0), 'lora_weight_cross_attn': float(lora_weight_cross_attn or 0.0), 'lora_weight_ffn': float(lora_weight_ffn or 0.0)},
         language=_normalize_track_language(language, instrumental),
         genre=str(prompt.genre or prompt.style or '').strip(),
         theme=str(prompt.theme or '').strip(),
@@ -3397,6 +3465,10 @@ def _track_sidecar_payload(track: Track) -> dict[str, Any]:
         'caption': _derive_track_caption(track),
         'instrumental': bool(getattr(track, 'instrumental', False)),
         'lora_id': str(getattr(track, 'lora_id', '') or ''),
+        'lora_weight': float(prompt.get('lora_weight') or 0.0),
+        'lora_weight_self_attn': float(prompt.get('lora_weight_self_attn') or 0.0),
+        'lora_weight_cross_attn': float(prompt.get('lora_weight_cross_attn') or 0.0),
+        'lora_weight_ffn': float(prompt.get('lora_weight_ffn') or 0.0),
         'seed': str(getattr(track, 'seed', '') or ''),
         'audio_path': str(getattr(track, 'audio_path', '') or ''),
         'audio_mime': str(getattr(track, 'audio_mime', '') or ''),
@@ -4098,11 +4170,11 @@ class RadioManager:
         items=self._lora_catalog if isinstance(self._lora_catalog,list) else []
         cat={str(x.get('id') or '').strip():x for x in items if isinstance(x,dict) and str(x.get('id') or '').strip()}
         enabled=[x for x in self.config.selected_loras if x.enabled and x.id in cat]
-        if not enabled: return '','',0.0
+        if not enabled: return '','',0.0,0.0,0.0,0.0
         chance=max(0,min(100,int(getattr(self.config, 'lora_use_probability', 100) or 0)))
         if random.randint(1,100) > chance:
-            return '','',0.0
-        chosen=random.choice(enabled); meta=cat[chosen.id]; return chosen.id, str(meta.get('trigger') or '').strip(), max(0.0,min(float(chosen.weight),2.0))
+            return '','',0.0,0.0,0.0,0.0
+        chosen=random.choice(enabled); meta=cat[chosen.id]; main_weight,self_attn_weight,cross_attn_weight,ffn_weight=chosen.effective_layer_weights(); return chosen.id, str(meta.get('trigger') or '').strip(), main_weight, self_attn_weight, cross_attn_weight, ffn_weight
     def _duration_caption_hint(self, duration: int, instrumental: bool) -> str:
         minutes = max(2, min(6, int(round(max(120, int(duration or 180)) / 60.0))))
         if minutes == 3:
@@ -4273,7 +4345,7 @@ class RadioManager:
             prompt.duration = int(generation_duration)
             prompt=_finalize_prompt(prompt, generation_duration, language, instrumental, source)
             opts=await self.engine.get_json('/api/options'); defaults=dict(opts.get('defaults') or {})
-            lora_id,lora_trigger,lora_weight=self._pick_lora(); model=str(self.config.model or opts.get('current_model') or 'acestep-v15-turbo').strip(); custom_catalog_track = str(getattr(prompt, 'catalog_source', '') or '').strip().lower() == 'custom'; station_caption='' if instrumental or custom_catalog_track else self.config.station_prompt.strip(); auto_duration_caption=self._duration_caption_hint(generation_duration, instrumental) if automatic_duration else ''; display_genre=str(prompt.genre or prompt.style or '').strip(); explicit_prompt_caption=_strip_caption_prefix(getattr(prompt, 'caption', '') or '', prompt.song_title, display_genre); rich_style_caption=_strip_caption_prefix(getattr(prompt, 'style', '') or '', prompt.song_title, display_genre); fallback_caption=' | '.join(x for x in [prompt.song_title,display_genre,station_caption,auto_duration_caption] if x); caption=explicit_prompt_caption or rich_style_caption or fallback_caption
+            lora_id,lora_trigger,lora_weight,lora_weight_self_attn,lora_weight_cross_attn,lora_weight_ffn=self._pick_lora(); model=str(self.config.model or opts.get('current_model') or 'acestep-v15-turbo').strip(); custom_catalog_track = str(getattr(prompt, 'catalog_source', '') or '').strip().lower() == 'custom'; station_caption='' if instrumental or custom_catalog_track else self.config.station_prompt.strip(); auto_duration_caption=self._duration_caption_hint(generation_duration, instrumental) if automatic_duration else ''; display_genre=str(prompt.genre or prompt.style or '').strip(); explicit_prompt_caption=_strip_caption_prefix(getattr(prompt, 'caption', '') or '', prompt.song_title, display_genre); rich_style_caption=_strip_caption_prefix(getattr(prompt, 'style', '') or '', prompt.song_title, display_genre); fallback_caption=' | '.join(x for x in [prompt.song_title,display_genre,station_caption,auto_duration_caption] if x); caption=explicit_prompt_caption or rich_style_caption or fallback_caption
             lm_enabled = bool(self.config.thinking) and not instrumental
             audio_format=str(getattr(self.config,'audio_format',PLAYER_AUDIO_FORMAT) or PLAYER_AUDIO_FORMAT).strip().lower()
             mp3_bitrate=str(getattr(self.config, 'mp3_bitrate', ACERADIO_MP3_DEFAULT_BITRATE) or ACERADIO_MP3_DEFAULT_BITRATE).strip().lower()
@@ -4287,7 +4359,7 @@ class RadioManager:
                 mp3_sample_rate = ACERADIO_MP3_DEFAULT_SAMPLE_RATE
             resolved_shift=_resolve_shift_for_model(model, getattr(self.config, 'shift', 3.0))
             resolved_steps=_resolve_inference_steps_for_model(model, getattr(self.config, 'inference_steps', 8))
-            payload={'model':model,'generation_mode':'Custom','task_type':'text2music','caption':caption,'song_title':str(prompt.song_title or ''),'title':str(prompt.song_title or ''),'lyrics':prompt.lyrics,'genre':str(prompt.genre or prompt.style or ''),'style':str(prompt.style or prompt.genre or ''),'theme':prompt.theme,'instrumental':instrumental,'thinking':lm_enabled,'duration':int(generation_duration),'duration_auto':False,'seed':-1,'lora_id':lora_id or None,'lora_trigger':lora_trigger or None,'lora_weight':lora_weight,'batch_size':1,'audio_format':audio_format,'mp3_bitrate':mp3_bitrate if audio_format == 'mp3' else None,'mp3_sample_rate':mp3_sample_rate if audio_format == 'mp3' else None,'use_adg':bool(getattr(self.config,'use_adg',False)),'inference_steps':int(resolved_steps),'infer_method':str(self.config.infer_method or defaults.get('infer_method') or 'ode'),'guidance_scale':float(self.config.guidance_scale),'shift':float(resolved_shift),'cfg_interval_start':float(self.config.cfg_interval_start),'cfg_interval_end':float(self.config.cfg_interval_end),'enable_normalization':bool(self.config.enable_normalization),'normalization_db':float(self.config.normalization_db),'score_scale':float(getattr(self.config,'score_scale',0.5) or 0.5),'auto_score':bool(getattr(self.config,'auto_score',False)) and not instrumental,'latent_shift':float(self.config.latent_shift),'latent_rescale':float(self.config.latent_rescale),'timesteps':self.config.timesteps,'bpm':prompt.bpm,'bpm_auto':False,'keyscale':prompt.key_scale,'key_auto':False,'timesignature':str(getattr(prompt,'timesignature','') or '4/4'),'timesig_auto':False,'vocal_language':str(getattr(prompt,'vocal_language','') or ('unknown' if instrumental else language)),'language_auto':instrumental,'lm_temperature':float(getattr(self.config,'lm_temperature',0.85) or 0.85),'use_cot_metas':bool(self.config.use_cot_metas) and lm_enabled,'use_cot_caption':bool(self.config.use_cot_caption) and lm_enabled,'use_cot_language':bool(self.config.use_cot_language) and lm_enabled,'lm_cfg_scale':float(self.config.lm_cfg_scale),'lm_top_k':int(getattr(self.config,'lm_top_k',0) or 0),'lm_top_p':float(getattr(self.config,'lm_top_p',0.9) or 0.9),'lm_negative_prompt':_build_lm_negative_prompt(getattr(self.config,'station_negative_prompt',''), getattr(self.config,'lm_negative_prompt','')),'use_constrained_decoding':bool(getattr(self.config,'use_constrained_decoding',True)) and lm_enabled,'parallel_thinking':bool(getattr(self.config,'parallel_thinking',False)) and lm_enabled,'constrained_decoding_debug':bool(getattr(self.config,'constrained_decoding_debug',False)) and lm_enabled}
+            payload={'model':model,'generation_mode':'Custom','task_type':'text2music','caption':caption,'song_title':str(prompt.song_title or ''),'title':str(prompt.song_title or ''),'lyrics':prompt.lyrics,'genre':str(prompt.genre or prompt.style or ''),'style':str(prompt.style or prompt.genre or ''),'theme':prompt.theme,'instrumental':instrumental,'thinking':lm_enabled,'duration':int(generation_duration),'duration_auto':False,'seed':-1,'lora_id':lora_id or None,'lora_trigger':lora_trigger or None,'lora_weight':lora_weight,'lora_weight_self_attn':lora_weight_self_attn if lora_id else None,'lora_weight_cross_attn':lora_weight_cross_attn if lora_id else None,'lora_weight_ffn':lora_weight_ffn if lora_id else None,'batch_size':1,'audio_format':audio_format,'mp3_bitrate':mp3_bitrate if audio_format == 'mp3' else None,'mp3_sample_rate':mp3_sample_rate if audio_format == 'mp3' else None,'use_adg':bool(getattr(self.config,'use_adg',False)),'inference_steps':int(resolved_steps),'infer_method':str(self.config.infer_method or defaults.get('infer_method') or 'ode'),'guidance_scale':float(self.config.guidance_scale),'shift':float(resolved_shift),'cfg_interval_start':float(self.config.cfg_interval_start),'cfg_interval_end':float(self.config.cfg_interval_end),'enable_normalization':bool(self.config.enable_normalization),'normalization_db':float(self.config.normalization_db),'score_scale':float(getattr(self.config,'score_scale',0.5) or 0.5),'auto_score':bool(getattr(self.config,'auto_score',False)) and not instrumental,'latent_shift':float(self.config.latent_shift),'latent_rescale':float(self.config.latent_rescale),'timesteps':self.config.timesteps,'bpm':prompt.bpm,'bpm_auto':False,'keyscale':prompt.key_scale,'key_auto':False,'timesignature':str(getattr(prompt,'timesignature','') or '4/4'),'timesig_auto':False,'vocal_language':str(getattr(prompt,'vocal_language','') or ('unknown' if instrumental else language)),'language_auto':instrumental,'lm_temperature':float(getattr(self.config,'lm_temperature',0.85) or 0.85),'use_cot_metas':bool(self.config.use_cot_metas) and lm_enabled,'use_cot_caption':bool(self.config.use_cot_caption) and lm_enabled,'use_cot_language':bool(self.config.use_cot_language) and lm_enabled,'lm_cfg_scale':float(self.config.lm_cfg_scale),'lm_top_k':int(getattr(self.config,'lm_top_k',0) or 0),'lm_top_p':float(getattr(self.config,'lm_top_p',0.9) or 0.9),'lm_negative_prompt':_build_lm_negative_prompt(getattr(self.config,'station_negative_prompt',''), getattr(self.config,'lm_negative_prompt','')),'use_constrained_decoding':bool(getattr(self.config,'use_constrained_decoding',True)) and lm_enabled,'parallel_thinking':bool(getattr(self.config,'parallel_thinking',False)) and lm_enabled,'constrained_decoding_debug':bool(getattr(self.config,'constrained_decoding_debug',False)) and lm_enabled}
             logger.info('AceRadio generation export request: format=%s requested_bitrate=%s requested_rate=%s payload_bitrate=%s payload_rate=%s', audio_format, getattr(self.config, 'mp3_bitrate', None), getattr(self.config, 'mp3_sample_rate', None), payload.get('mp3_bitrate'), payload.get('mp3_sample_rate'))
             await self._ensure_engine_music_runtime_loaded(model)
             job=await self.engine.post_json('/api/jobs', payload); job_id=job['job_id']
@@ -4311,7 +4383,7 @@ class RadioManager:
             if not audio_urls: raise RuntimeError(f'Job {job_id} produced no audio')
             audio_bytes,audio_mime=await self.engine.get_bytes(audio_urls[0]); seeds=result.get('audio_resolved_seeds') or []; seed=str(seeds[0]) if seeds else ''
             await asyncio.to_thread(_cleanup_runtime, self.config.vram_cleanup_mode)
-            track=_build_track(prompt, duration=generation_duration, language=language, instrumental=instrumental, source=source, job_id=job_id, audio_bytes=audio_bytes, audio_mime=audio_mime, seed=seed, lora_id=lora_id, audio_path=str(audio_paths[0]) if audio_paths else '')
+            track=_build_track(prompt, duration=generation_duration, language=language, instrumental=instrumental, source=source, job_id=job_id, audio_bytes=audio_bytes, audio_mime=audio_mime, seed=seed, lora_id=lora_id, lora_weight=lora_weight, lora_weight_self_attn=lora_weight_self_attn, lora_weight_cross_attn=lora_weight_cross_attn, lora_weight_ffn=lora_weight_ffn, audio_path=str(audio_paths[0]) if audio_paths else '')
             if track.audio_path:
                 _real_dur = await _probe_audio_duration(track.audio_path)
                 if _real_dur and _real_dur > 0:
@@ -4498,7 +4570,7 @@ class RadioManager:
             'real_duration': float(_real_dur_val) if (_real_dur_val and _real_dur_val > 0) else None,
             'seed': t.seed, 'audio_url': f'/api/audio/{t.id}', 'created_at': t.created_at,
             'prompt': t.prompt, 'language': t.language, 'instrumental': t.instrumental,
-            'lora_id': t.lora_id, 'lora_label': lora_label,
+            'lora_id': t.lora_id, 'lora_label': lora_label, 'lora_weight': float(prompt_meta.get('lora_weight') or 0.0), 'lora_weight_self_attn': float(prompt_meta.get('lora_weight_self_attn') or 0.0), 'lora_weight_cross_attn': float(prompt_meta.get('lora_weight_cross_attn') or 0.0), 'lora_weight_ffn': float(prompt_meta.get('lora_weight_ffn') or 0.0),
             'source': t.source, 'display_source': display_source,
             'display_source_label': display_source_label,
             'ready': True, 'metadata_complete': True,
@@ -6779,6 +6851,10 @@ class OutputsCache:
                     'language':     req.get('vocal_language') or 'en',
                     'instrumental': bool(req.get('instrumental', False)),
                     'lora_id':      req.get('lora_id') or '',
+                    'lora_weight':  req.get('lora_weight') or 0.0,
+                    'lora_weight_self_attn': req.get('lora_weight_self_attn') or 0.0,
+                    'lora_weight_cross_attn': req.get('lora_weight_cross_attn') or 0.0,
+                    'lora_weight_ffn': req.get('lora_weight_ffn') or 0.0,
                     'seed':         str(audio0.get('resolved_seed') or req.get('seed') or ''),
                     'style':        req.get('style') or req.get('caption') or '',
                     'inference_steps': _resolve_inference_steps_for_model(req.get('model'), req.get('inference_steps') or 8),
@@ -6859,6 +6935,10 @@ class OutputsCache:
             'style': str(meta.get('style') or meta.get('genre') or ''),
             'theme': str(meta.get('theme') or ''),
             'caption': str(meta.get('caption') or ''),
+            'lora_weight': float(meta.get('lora_weight') or 0.0),
+            'lora_weight_self_attn': float(meta.get('lora_weight_self_attn') or 0.0),
+            'lora_weight_cross_attn': float(meta.get('lora_weight_cross_attn') or 0.0),
+            'lora_weight_ffn': float(meta.get('lora_weight_ffn') or 0.0),
             'bpm': bpm,
             'key_scale': str(meta.get('key_scale') or 'C Major'),
             'duration': duration,

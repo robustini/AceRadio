@@ -517,6 +517,21 @@ The radio can:
 
 That makes LoRAs part of the station identity, not just a manual one-off override.
 
+### Per-LoRA weight controls
+
+Each LoRA entry carries its own main LoRA weight together with dedicated advanced weights for:
+
+- **Self-Attention**
+- **Cross-Attention**
+- **FFN / MLP**
+
+The main weight remains directly editable and the advanced values follow that main weight until they are changed explicitly for the selected LoRA.
+Once changed, the edited control becomes a real override while the untouched controls continue to follow the main LoRA weight.
+
+These values are part of the AceRadio station settings for each LoRA entry, survive save/load cycles, and are propagated into the job payload and runtime LoRA application path used by the radio.
+
+All four LoRA weights use the same effective range of **0.0 to 2.0**, including values above `1.0`, so the UI, settings layer, job payload, and runtime module scaling all stay aligned.
+
 ---
 
 ## 🎚️ Station controls and generation values
