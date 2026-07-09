@@ -146,6 +146,9 @@ DICT.en['common.generate_without_autoplay_hint']='Generate songs and save them t
 DICT.it['common.generate_without_autoplay_hint']='Genera i brani e li salva nella cartella di output senza mandarli in onda. Disattivalo per riprodurli dal vivo dentro AceRadio.';
 DICT.en['common.generate_without_autoplay_note']='Songs stay in the reservoir · no auto-play';
 DICT.it['common.generate_without_autoplay_note']='I brani restano nel serbatoio · niente play automatico';
+EXACT_MAP.set('Generate without auto-play','common.generate_without_autoplay');
+EXACT_MAP.set('Generate songs and save them to the outputs folder without putting them on air. Turn it off to play them live inside AceRadio.','common.generate_without_autoplay_hint');
+EXACT_MAP.set('Songs stay in the reservoir · no auto-play','common.generate_without_autoplay_note');
 function getStoredPreference(){ try{ const raw=String(localStorage.getItem(STORAGE_KEY)||'').trim().toLowerCase(); if(raw&&SELECTABLE.includes(raw)) return raw; }catch(_){} return ''; }
 function detectBrowserLanguage(){ const langs=[]; try{ if(Array.isArray(navigator.languages)) langs.push(...navigator.languages); }catch(_){} try{ if(navigator.language) langs.push(navigator.language); }catch(_){} for(const raw of langs){ const lang=String(raw||'').trim().toLowerCase(); if(lang.startsWith('it')) return 'it'; if(lang.startsWith('en')) return 'en'; } return 'en'; }
 function getPageLanguageMode(){
