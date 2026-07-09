@@ -1274,6 +1274,7 @@ def _normalize_radio_request(payload: 'RadioStartRequest') -> 'RadioStartRequest
     payload.min_duration = _coerce_duration_value(getattr(payload, 'min_duration', None), 60)
     payload.max_duration = max(payload.min_duration, _coerce_duration_value(getattr(payload, 'max_duration', None), payload.min_duration))
     payload.automatic_duration = bool(getattr(payload, 'automatic_duration', False))
+    payload.generate_without_autoplay = bool(getattr(payload, 'generate_without_autoplay', True))
     payload.inference_steps = _resolve_inference_steps_for_model(payload.model, payload.inference_steps)
     payload.instrumental_probability = max(0, min(100, int(payload.instrumental_probability)))
     payload.language_rotation_mode = (payload.language_rotation_mode or 'round_robin').strip().lower() or 'round_robin'
@@ -1825,6 +1826,7 @@ def _normalize_settings_for_storage(data: dict[str, Any]) -> dict[str, Any]:
     clean['batch_size'] = 1
     clean.pop('auto_duration', None)
     clean['automatic_duration'] = bool(clean.get('automatic_duration', False))
+    clean['generate_without_autoplay'] = bool(clean.get('generate_without_autoplay', True))
     clean['min_duration'] = _coerce_duration_value(clean.get('min_duration'), 60)
     clean['max_duration'] = max(clean['min_duration'], _coerce_duration_value(clean.get('max_duration'), clean['min_duration']))
     clean['station_prompt'] = str(clean.get('station_prompt') or 'Late-night radio for city insomniacs: cinematic, melodic, emotionally rich, and never predictable.').strip()
@@ -2026,6 +2028,7 @@ class RadioStartRequest(BaseModel):
     mp3_bitrate:str=ACERADIO_MP3_DEFAULT_BITRATE
     mp3_sample_rate:int=ACERADIO_MP3_DEFAULT_SAMPLE_RATE
     monitor_muted:bool=False
+    generate_without_autoplay:bool=True
     jingle_separator_arm_offset_s:float=0.0
     jingle_separator_min_remaining_offset_s:float=0.0
     jingle_overlay_mid_offset_s:float=0.0
@@ -4631,7 +4634,7 @@ class RadioManager:
         degraded=bool(playout and (stale or not child_alive or not snapshot_fresh or last_error))
         authority_source='playout' if playout_authoritative else ('runtime' if runtime_active else 'idle')
         backend_health={'runtime_active':runtime_active,'playout_active':bool(playout_child_active or runtime_active),'playout_child_active':playout_child_active,'playout_authoritative':playout_authoritative,'authority_source':authority_source,'radio_on_air':runtime_active,'current_track_loaded':bool(self.current_track),'child_alive':bool(child_alive),'healthy':healthy,'degraded':degraded,'fallback_mode':fallback_mode,'snapshot_fresh':bool(snapshot_fresh),'stale':stale,'stale_reason':str(playout.get('stale_reason') or ''),'last_error':last_error}
-        return {'running':self.running,'radio_state':state,'model':self.config.model or opts.get('current_model') or health.get('model'),'ollama_model':OLLAMA_MODEL,'current_track':self.payload(self.current_track),'playback_elapsed':playback_elapsed,'playback_authoritative':self._has_authoritative_playout(),'playout':playout,'next_track':self.payload(self.next_track),'prepared_count':prepared,'reservoir_count':len(self.reservoir),'reservoir_target':getattr(self.config,'reservoir_target',RESERVOIR_TARGET),'refill_threshold':getattr(self.config,'refill_threshold',RESERVOIR_REFILL_THRESHOLD),'is_refilling':bool(self._refill and not self._refill.done()),'reservoir':[self.payload(x) for x in self.reservoir],'history':[x.song_title for x in self.recently_played[-RECENTLY_PLAYED_LIMIT:]],'recently_played':[self.payload(x) for x in reversed(self.recently_played[-RECENTLY_PLAYED_LIMIT:])],'last_error':self.last_error,'defaults':opts.get('defaults') or {},'settings_path':str(SETTINGS_PATH),'vram_cleanup_mode':self.config.vram_cleanup_mode,'max_saved_tracks':self.config.max_saved_tracks,'lora_use_probability':getattr(self.config,'lora_use_probability',100),'archived_tracks':len(self.archived_tracks),'monitor_muted':bool(getattr(self.config,'monitor_muted',False)),'backend_playback':bool(self.backend_playback),'cache_available':self.outputs_cache.peek_count(),'cache_on_disk':_outputs_cache_on_disk_count(),'automatic_duration':bool(getattr(self.config,'automatic_duration',False)),'current_playback_rate':playback_rate,'current_playback_rate_percent':playback_rate_percent,'auto_transition_cut_seconds':transition_cut,'playback_modifiers':{'active':bool(transition_cut>0 or separator_before_end>0.0 or abs(playback_rate-1.0)>0.001),'transition_cut_seconds':transition_cut,'separator_before_end_seconds':separator_before_end,'speed_percent':playback_rate_percent,'speed_active':bool(abs(playback_rate-1.0)>0.001)},'reservoir_state':{'prepared_tracks':prepared,'next_ready':1 if self.next_track is not None else 0,'reservoir_ready':len(self.reservoir),'cache_pool_ready':self.outputs_cache.peek_count(),'cache_on_disk':_outputs_cache_on_disk_count(),'generation_in_progress':bool(self._generation_in_progress),'preparing_tracks':max(0, prepared-(1 if self.next_track is not None else 0)),'refill_threshold':getattr(self.config,'refill_threshold',RESERVOIR_REFILL_THRESHOLD),'reservoir_target':getattr(self.config,'reservoir_target',RESERVOIR_TARGET),'last_refill_reason':self._last_refill_reason,'last_generation_action':self._last_generation_action,'replenishment_state':'refilling' if self._generation_in_progress or bool(self._refill and not self._refill.done()) else ('ready' if prepared>=getattr(self.config,'reservoir_target',RESERVOIR_TARGET) else 'idle')},'backend_health':backend_health,'transition_state':{'current_track_title':str(getattr(self.current_track,'song_title','') or ''),'current_track_id':current_id,'next_track_title':str(getattr(self.next_track,'song_title','') or ''),'next_track_id':next_id,'queued_separator':str((self._queued_separator or {}).get('filename','') or ''),'active_jingle':str((self._jingle_event or {}).get('filename','') or ''),'active_jingle_mode':str((self._jingle_event or {}).get('mode','') or ''),'separator_transition_pending':bool(self._separator_transition_pending),'auto_transition_cut_seconds':transition_cut,'remaining_to_cut_seconds':round(remaining_to_cut_seconds,2) if remaining_to_cut_seconds is not None else None,'playback_elapsed':playback_elapsed,'playback_rate_percent':playback_rate_percent,'playout_fresh_for_current':playout_fresh_for_current},'ops_events':list(self._ops_events),'jingle_timing':{'jingle_separator_arm_offset_s':getattr(self.config,'jingle_separator_arm_offset_s',0.0),'jingle_separator_start_before_end_s':separator_before_end,'jingle_separator_min_remaining_offset_s':getattr(self.config,'jingle_separator_min_remaining_offset_s',0.0),'jingle_overlay_mid_offset_s':getattr(self.config,'jingle_overlay_mid_offset_s',0.0),'jingle_overlay_trigger_window_s':getattr(self.config,'jingle_overlay_trigger_window_s',JINGLE_OVERLAY_MID_WINDOW_S),'jingle_overlay_min_duration_s':getattr(self.config,'jingle_overlay_min_duration_s',JINGLE_OVERLAY_MIN_DURATION_S),'admin_separator_fade_ms':getattr(self.config,'admin_separator_fade_ms',500),'admin_overlay_pre_duck_ms':getattr(self.config,'admin_overlay_pre_duck_ms',300),'admin_overlay_restore_ms':getattr(self.config,'admin_overlay_restore_ms',700)},'can_step_previous':len(self.archived_tracks)>0,'can_step_next':self.next_track is not None or len(self.reservoir)>0}
+        return {'running':self.running,'radio_state':state,'model':self.config.model or opts.get('current_model') or health.get('model'),'ollama_model':OLLAMA_MODEL,'current_track':self.payload(self.current_track),'playback_elapsed':playback_elapsed,'playback_authoritative':self._has_authoritative_playout(),'playout':playout,'next_track':self.payload(self.next_track),'prepared_count':prepared,'reservoir_count':len(self.reservoir),'reservoir_target':getattr(self.config,'reservoir_target',RESERVOIR_TARGET),'refill_threshold':getattr(self.config,'refill_threshold',RESERVOIR_REFILL_THRESHOLD),'is_refilling':bool(self._refill and not self._refill.done()),'reservoir':[self.payload(x) for x in self.reservoir],'history':[x.song_title for x in self.recently_played[-RECENTLY_PLAYED_LIMIT:]],'recently_played':[self.payload(x) for x in reversed(self.recently_played[-RECENTLY_PLAYED_LIMIT:])],'last_error':self.last_error,'defaults':opts.get('defaults') or {},'settings_path':str(SETTINGS_PATH),'vram_cleanup_mode':self.config.vram_cleanup_mode,'max_saved_tracks':self.config.max_saved_tracks,'lora_use_probability':getattr(self.config,'lora_use_probability',100),'archived_tracks':len(self.archived_tracks),'monitor_muted':bool(getattr(self.config,'monitor_muted',False)),'generate_without_autoplay':bool(getattr(self.config,'generate_without_autoplay',True)),'backend_playback':bool(self.backend_playback),'cache_available':self.outputs_cache.peek_count(),'cache_on_disk':_outputs_cache_on_disk_count(),'automatic_duration':bool(getattr(self.config,'automatic_duration',False)),'current_playback_rate':playback_rate,'current_playback_rate_percent':playback_rate_percent,'auto_transition_cut_seconds':transition_cut,'playback_modifiers':{'active':bool(transition_cut>0 or separator_before_end>0.0 or abs(playback_rate-1.0)>0.001),'transition_cut_seconds':transition_cut,'separator_before_end_seconds':separator_before_end,'speed_percent':playback_rate_percent,'speed_active':bool(abs(playback_rate-1.0)>0.001)},'reservoir_state':{'prepared_tracks':prepared,'next_ready':1 if self.next_track is not None else 0,'reservoir_ready':len(self.reservoir),'cache_pool_ready':self.outputs_cache.peek_count(),'cache_on_disk':_outputs_cache_on_disk_count(),'generation_in_progress':bool(self._generation_in_progress),'preparing_tracks':max(0, prepared-(1 if self.next_track is not None else 0)),'refill_threshold':getattr(self.config,'refill_threshold',RESERVOIR_REFILL_THRESHOLD),'reservoir_target':getattr(self.config,'reservoir_target',RESERVOIR_TARGET),'last_refill_reason':self._last_refill_reason,'last_generation_action':self._last_generation_action,'replenishment_state':'refilling' if self._generation_in_progress or bool(self._refill and not self._refill.done()) else ('ready' if prepared>=getattr(self.config,'reservoir_target',RESERVOIR_TARGET) else 'idle')},'backend_health':backend_health,'transition_state':{'current_track_title':str(getattr(self.current_track,'song_title','') or ''),'current_track_id':current_id,'next_track_title':str(getattr(self.next_track,'song_title','') or ''),'next_track_id':next_id,'queued_separator':str((self._queued_separator or {}).get('filename','') or ''),'active_jingle':str((self._jingle_event or {}).get('filename','') or ''),'active_jingle_mode':str((self._jingle_event or {}).get('mode','') or ''),'separator_transition_pending':bool(self._separator_transition_pending),'auto_transition_cut_seconds':transition_cut,'remaining_to_cut_seconds':round(remaining_to_cut_seconds,2) if remaining_to_cut_seconds is not None else None,'playback_elapsed':playback_elapsed,'playback_rate_percent':playback_rate_percent,'playout_fresh_for_current':playout_fresh_for_current},'ops_events':list(self._ops_events),'jingle_timing':{'jingle_separator_arm_offset_s':getattr(self.config,'jingle_separator_arm_offset_s',0.0),'jingle_separator_start_before_end_s':separator_before_end,'jingle_separator_min_remaining_offset_s':getattr(self.config,'jingle_separator_min_remaining_offset_s',0.0),'jingle_overlay_mid_offset_s':getattr(self.config,'jingle_overlay_mid_offset_s',0.0),'jingle_overlay_trigger_window_s':getattr(self.config,'jingle_overlay_trigger_window_s',JINGLE_OVERLAY_MID_WINDOW_S),'jingle_overlay_min_duration_s':getattr(self.config,'jingle_overlay_min_duration_s',JINGLE_OVERLAY_MIN_DURATION_S),'admin_separator_fade_ms':getattr(self.config,'admin_separator_fade_ms',500),'admin_overlay_pre_duck_ms':getattr(self.config,'admin_overlay_pre_duck_ms',300),'admin_overlay_restore_ms':getattr(self.config,'admin_overlay_restore_ms',700)},'can_step_previous':len(self.archived_tracks)>0,'can_step_next':self.next_track is not None or len(self.reservoir)>0}
     async def _advance_rotation(self, from_track_id: str = '') -> bool:
         current_id = self.current_track.id if self.current_track else ''
 
@@ -4802,24 +4805,25 @@ class RadioManager:
             self._ensure_refill()
             while self.running:
                 self._promote_reservoir_to_next()
-                self._promote_next_to_current()
-                if self.current_track and not self.player_started_at and not self._has_authoritative_playout():
-                    snap = self._playout_status()
-                    current_id = str(getattr(self.current_track, 'id', '') or '')
-                    snap_track_id = str(snap.get('current_track_id') or '')
-                    playout_stale_for_current = bool(current_id and current_id == snap_track_id and (snap.get('stale') or snap.get('child_alive') is False or snap.get('snapshot_fresh') is False))
-                    if (not playout_stale_for_current
-                            and self._track_promoted_at
-                            and not self._track_started_confirmed
-                            and (time.time() - self._track_promoted_at) > TRACK_START_FALLBACK_S):
-                        logger.warning(
-                            '[AceRadio] FALLBACK CLOCK: track-started mai ricevuto per "%s" '
-                            '(%.0fs dalla promozione) — autoplay bloccato o client assente. '
-                            'Avvio clock backend. Il timing potrebbe essere impreciso.',
-                            self.current_track.song_title,
-                            time.time() - self._track_promoted_at,
-                        )
-                        self._start_backend_playback_clock()
+                if not bool(getattr(self.config, 'generate_without_autoplay', True)):
+                    self._promote_next_to_current()
+                    if self.current_track and not self.player_started_at and not self._has_authoritative_playout():
+                        snap = self._playout_status()
+                        current_id = str(getattr(self.current_track, 'id', '') or '')
+                        snap_track_id = str(snap.get('current_track_id') or '')
+                        playout_stale_for_current = bool(current_id and current_id == snap_track_id and (snap.get('stale') or snap.get('child_alive') is False or snap.get('snapshot_fresh') is False))
+                        if (not playout_stale_for_current
+                                and self._track_promoted_at
+                                and not self._track_started_confirmed
+                                and (time.time() - self._track_promoted_at) > TRACK_START_FALLBACK_S):
+                            logger.warning(
+                                '[AceRadio] FALLBACK CLOCK: track-started mai ricevuto per "%s" '
+                                '(%.0fs dalla promozione) — autoplay bloccato o client assente. '
+                                'Avvio clock backend. Il timing potrebbe essere impreciso.',
+                                self.current_track.song_title,
+                                time.time() - self._track_promoted_at,
+                            )
+                            self._start_backend_playback_clock()
                 if self._current_track_finished():
                     current_id = self.current_track.id if self.current_track else ''
                     await self._advance_rotation(from_track_id=current_id)
@@ -7343,6 +7347,7 @@ def create_app()->FastAPI:
                 'lora_use_probability': 100,
                 'archived_tracks': 0,
                 'monitor_muted': False,
+                'generate_without_autoplay': True,
                 'backend_playback': False,
                 'automatic_duration': False,
                 'current_playback_rate': 1.0,
